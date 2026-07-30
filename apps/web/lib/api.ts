@@ -47,10 +47,15 @@ function csrfToken(): string {
  */
 export async function apiFetch<T>(
   path: string,
-  options: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    signal?: AbortSignal;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   const method = options.method ?? 'GET';
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
 
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   if (method !== 'GET' && method !== 'HEAD') headers[CSRF_HEADER] = csrfToken();
@@ -170,6 +175,61 @@ export interface SceneVersion {
   createdBy: { id: string; name: string } | null;
 }
 
+export interface GenerationResult {
+  id: string;
+  width: number;
+  height: number;
+  format: string;
+  seed: string | null;
+  selected: boolean;
+  evaluation: {
+    score: number;
+    issues: { code: string; severity: string; message: string }[];
+    notEvaluated: string[];
+  } | null;
+  url: string | null;
+  thumbnailUrl: string | null;
+}
+
+export interface GenerationJob {
+  id: string;
+  sceneId: string;
+  sceneVersionId: string;
+  status: string;
+  statusLabel: string;
+  progress: number;
+  requestedCount: number;
+  selectedProvider: string | null;
+  estimatedCredits: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  results: GenerationResult[];
+}
+
+export interface Estimate {
+  provider: string;
+  credits: number;
+  estimatedSeconds: number;
+  count: number;
+  summary: string;
+  prompt: string;
+  warnings: { code: string; message: string }[];
+  issues: { code: string; level: string; message: string }[];
+  canGenerate: boolean;
+}
+
+/** Evento de progresso recebido pelo SSE. */
+export interface GenerationProgress {
+  generationJobId: string;
+  status: string;
+  statusLabel: string;
+  progress: number;
+  message: string | null;
+  at: string;
+}
+
 // ── Operações ────────────────────────────────────────────────────────────────
 
 export async function fetchHealth(): Promise<HealthReport> {
@@ -215,6 +275,31 @@ export const api = {
   listAssets: (projectId: string) => apiFetch<Asset[]>(`/projects/${projectId}/assets`),
 
   deleteAsset: (assetId: string) => apiFetch<void>(`/assets/${assetId}`, { method: 'DELETE' }),
+
+  estimate: (sceneId: string) =>
+    apiFetch<Estimate>('/generation-jobs/estimate', { method: 'POST', body: { sceneId } }),
+
+  /**
+   * `Idempotency-Key` gerada aqui: sem ela, duplo clique no botão Gerar viraria dois jobs —
+   * e, a partir da Fase 6, duas cobranças.
+   */
+  generate: (sceneId: string, idempotencyKey: string) =>
+    apiFetch<GenerationJob>('/generation-jobs', {
+      method: 'POST',
+      body: { sceneId },
+      headers: { 'idempotency-key': idempotencyKey },
+    }),
+
+  getGeneration: (jobId: string) => apiFetch<GenerationJob>(`/generation-jobs/${jobId}`),
+
+  listGenerations: (sceneId: string) =>
+    apiFetch<GenerationJob[]>(`/scenes/${sceneId}/generation-jobs`),
+
+  cancelGeneration: (jobId: string) =>
+    apiFetch<GenerationJob>(`/generation-jobs/${jobId}/cancel`, { method: 'POST' }),
+
+  selectResult: (resultId: string) =>
+    apiFetch<GenerationResult>(`/generation-results/${resultId}/select`, { method: 'POST' }),
 };
 
 /**
@@ -263,4 +348,7 @@ export const queryKeys = {
   scene: (id: string) => ['scenes', id] as const,
   versions: (sceneId: string) => ['scenes', sceneId, 'versions'] as const,
   assets: (projectId: string) => ['projects', projectId, 'assets'] as const,
+  generations: (sceneId: string) => ['scenes', sceneId, 'generations'] as const,
+  generation: (jobId: string) => ['generation-jobs', jobId] as const,
+  estimate: (sceneId: string) => ['scenes', sceneId, 'estimate'] as const,
 };

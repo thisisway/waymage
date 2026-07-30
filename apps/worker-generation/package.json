@@ -13,6 +13,7 @@
   "dependencies": {
     "@waymage/database": "workspace:*",
     "@waymage/domain": "workspace:*",
+    "@waymage/prompt-compiler": "workspace:*",
     "@waymage/provider-sdk": "workspace:*",
     "@waymage/scene-spec": "workspace:*",
     "@waymage/storage": "workspace:*",

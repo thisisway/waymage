@@ -27,11 +27,11 @@ const storage = new StorageService({
   forcePathStyle: env.S3_FORCE_PATH_STYLE,
 });
 
-const events = new EventPublisher(publisher, env.NODE_ENV !== 'production');
+const events = new EventPublisher(publisher);
 
 const generationWorker = new Worker(
   QUEUE_GENERATION,
-  (job) => processGenerationJob(job, { storage, events, logger }),
+  (job) => processGenerationJob(job, { prisma, storage, events, logger }),
   { connection, concurrency: env.WORKER_CONCURRENCY },
 );
 

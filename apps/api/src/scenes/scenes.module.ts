@@ -8,5 +8,7 @@ import { ScenesService } from './scenes.service';
   imports: [AssetsModule],
   controllers: [ScenesController],
   providers: [ScenesService],
+  // O módulo de gerações cria o snapshot da cena antes de enfileirar.
+  exports: [ScenesService],
 })
 export class ScenesModule {}

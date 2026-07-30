@@ -7,26 +7,14 @@ import type { Redis } from 'ioredis';
  * O worker empurra por pub/sub em vez de a API ficar consultando o banco: polling a cada
  * segundo, por conexão SSE aberta, é carga desnecessária no Postgres.
  *
- * A lista `recent` existe só para inspeção manual em desenvolvimento — a API real assina
- * o canal do job. Sai junto com o DevController na Fase 5.
+ * Pub/sub não guarda histórico — quem não estava ouvindo perde o evento. É aceitável porque
+ * o estado autoritativo está no banco: ao abrir o stream, a API envia o estado atual antes
+ * de repassar o que vier depois.
  */
-const RECENT_EVENTS_KEY = 'generation:events:recent';
-const RECENT_EVENTS_MAX = 50;
-
 export class EventPublisher {
-  constructor(
-    private readonly redis: Redis,
-    private readonly keepRecent: boolean,
-  ) {}
+  constructor(private readonly redis: Redis) {}
 
   async publish(event: GenerationEvent): Promise<void> {
-    const serialized = JSON.stringify(event);
-    const pipeline = this.redis.pipeline();
-    pipeline.publish(generationEventsChannel(event.generationJobId), serialized);
-    if (this.keepRecent) {
-      pipeline.lpush(RECENT_EVENTS_KEY, serialized);
-      pipeline.ltrim(RECENT_EVENTS_KEY, 0, RECENT_EVENTS_MAX - 1);
-    }
-    await pipeline.exec();
+    await this.redis.publish(generationEventsChannel(event.generationJobId), JSON.stringify(event));
   }
 }

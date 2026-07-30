@@ -3,12 +3,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { validateSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
+import {
+  GenerationProgressBar,
+  GenerationSummary,
+  ResultsGrid,
+} from '../../../components/generation-panel';
 import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
 import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
+import { useGeneration } from '../../../lib/use-generation';
 import { INSPECTOR_SECTIONS, SECTION_LABELS, useEditorStore } from '../../../stores/editor-store';
 
 /**
@@ -70,6 +76,14 @@ export default function SceneEditorPage() {
     queryFn: () => api.listVersions(sceneId),
   });
 
+  const generation = useGeneration(sceneId);
+
+  const selectResult = useMutation({
+    mutationFn: (resultId: string) => api.selectResult(resultId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.generation(generation.job?.id ?? '') }),
+  });
+
   if (error instanceof ApiError && error.status === 401) {
     router.replace('/login');
     return null;
@@ -103,6 +117,8 @@ export default function SceneEditorPage() {
         onSnapshot={() => snapshot.mutate('snapshot manual')}
         snapshotting={snapshot.isPending}
         blocked={blocking.length > 0}
+        generating={generation.running}
+        onGenerate={generation.start}
         indicator={<SaveIndicator state={autosave} />}
       />
 
@@ -111,7 +127,11 @@ export default function SceneEditorPage() {
           <SectionNav />
           <LibraryPanel projectId={scene.projectId} spec={scene.sceneSpec} onChange={updateSpec} />
         </aside>
-        <Canvas scene={scene} />
+        <Canvas
+          scene={scene}
+          generation={generation}
+          onSelectResult={(resultId) => selectResult.mutate(resultId)}
+        />
         <InspectorPanel
           scene={scene}
           onChange={updateSpec}
@@ -153,6 +173,8 @@ function TopBar({
   onSnapshot,
   snapshotting,
   blocked,
+  generating,
+  onGenerate,
   indicator,
 }: {
   scene: Scene;
@@ -160,6 +182,8 @@ function TopBar({
   onSnapshot: () => void;
   snapshotting: boolean;
   blocked: boolean;
+  generating: boolean;
+  onGenerate: () => void;
   indicator: React.ReactNode;
 }) {
   return (
@@ -192,11 +216,12 @@ function TopBar({
         </button>
         <button
           type="button"
-          disabled
-          title={blocked ? 'Resolva os erros da cena antes de gerar' : 'Disponível na Fase 5'}
+          onClick={onGenerate}
+          disabled={blocked || generating}
+          title={blocked ? 'Resolva os erros da cena antes de gerar' : undefined}
           className="rounded-md bg-accent px-3 py-1.5 font-medium text-surface-base disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Gerar
+          {generating ? 'Gerando…' : 'Gerar'}
         </button>
       </div>
     </header>
@@ -248,43 +273,33 @@ function SectionNav() {
   );
 }
 
-/** Resumo legível da cena — o que o blueprint §22 pede antes de gerar. */
-function Canvas({ scene }: { scene: Scene }) {
-  const spec = scene.sceneSpec;
-  const summary = useMemo(
-    () =>
-      [
-        spec.subject.description,
-        spec.subject.pose,
-        `em ${spec.scene.location}`,
-        spec.scene.time,
-        `${spec.camera.shot}, ${spec.camera.angle}`,
-        `luz ${spec.lighting.key}, contraste ${spec.lighting.contrast}`,
-        spec.style.preset,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    [spec],
-  );
-
+/** Área central: resultados, progresso e resumo do que será gerado. */
+function Canvas({
+  scene,
+  generation,
+  onSelectResult,
+}: {
+  scene: Scene;
+  generation: ReturnType<typeof useGeneration>;
+  onSelectResult: (resultId: string) => void;
+}) {
   return (
-    <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-5 p-8">
-      <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
-        {Array.from({ length: spec.output.count }, (_, i) => (
-          <div
-            key={i}
-            className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-surface-border bg-surface-raised text-xs text-ink-muted"
-          >
-            rascunho {i + 1}
-          </div>
-        ))}
-      </div>
+    <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8">
+      <ResultsGrid
+        job={generation.job}
+        placeholders={scene.sceneSpec.output.count}
+        onSelect={onSelectResult}
+      />
 
-      <p className="max-w-2xl text-center text-xs leading-relaxed text-ink-muted">{summary}</p>
-      <p className="text-xs text-ink-muted">
-        {spec.output.count} imagens · {spec.output.aspectRatio} · {spec.output.quality} ·{' '}
-        {spec.output.format}
-      </p>
+      <GenerationProgressBar state={generation} />
+
+      {generation.error && (
+        <p role="alert" className="text-xs text-state-error">
+          {generation.error.message}
+        </p>
+      )}
+
+      <GenerationSummary sceneId={scene.id} />
     </main>
   );
 }

@@ -511,6 +511,83 @@ os guards não olham.
 
 ---
 
+## D-032 — Prompts compostos em ingles, texto do usuario preservado
+
+**Status:** aceita (Fase 5)
+
+Modelos de imagem sao treinados majoritariamente em ingles e respondem melhor ao vocabulario
+fotografico nessa lingua — "waist-up shot, shallow depth of field" produz resultado mais
+previsivel que a traducao literal.
+
+O que **nao** e traduzido e o texto livre do usuario: descricao do sujeito, local, pose. Passar
+isso por traducao automatica introduziria erro sem ganho, e o modelo lida bem com trechos em
+portugues dentro de uma estrutura em ingles.
+
+A ordem das secoes (§10.3 do blueprint) nao e decorativa: modelos de difusao dao mais peso ao
+inicio do prompt, entao o que define a imagem vem antes do que a refina.
+
+**Travas viram afirmacao, nao negacao.** "preserve the face" funciona melhor que "don't change
+the face" — modelos de difusao lidam mal com negacao, e um negativo mal interpretado vira
+justamente o que se queria evitar.
+
+---
+
+## D-033 — Maquina de estados explicita, com transicao validada
+
+**Status:** aceita (Fase 5)
+
+Um job de geracao custa dinheiro. Cada transicao indevida e um credito capturado duas vezes,
+uma reserva nunca liberada ou um resultado gravado num job que ja havia falhado. Deixar o
+fluxo implicito em `if`s espalhados pelo worker torna esses casos invisiveis ate acontecerem.
+
+`assertTransition` roda a cada passo do pipeline. Estados terminais nao tem saida — reabrir um
+job concluido e impossivel por construcao, nao por disciplina.
+
+Mora em `packages/domain` porque API e worker precisam concordar: a API cria em `QUEUED` e
+cancela; o worker conduz o resto.
+
+---
+
+## D-034 — SSE escrito na resposta crua, nao com `@Sse()`
+
+**Status:** aceita (Fase 5)
+
+SSE e nao WebSocket: o fluxo e de mao unica e o navegador reconecta sozinho. A autenticacao
+funciona porque `EventSource` envia cookies — nao funcionaria com header `Authorization`, que
+a API deliberadamente nao usa (D-009).
+
+O decorator `@Sse()` do Nest nao serviu por dois motivos:
+
+1. **Tenancy antes dos headers.** O 404 de recurso alheio precisa sair _antes_ de qualquer
+   byte do stream; com `@Sse()` o erro chegava depois de a resposta ja ter comecado.
+2. **Heartbeat.** Proxies derrubam conexao ociosa, e uma geracao pode passar minutos entre
+   transicoes. Um comentario SSE a cada 20s mantem a conexao viva — no EasyPanel isso nao e
+   opcional. `x-accel-buffering: no` acompanha, senao o proxy segura os eventos e o progresso
+   chega todo de uma vez, no fim.
+
+Uma conexao Redis por processo, com `psubscribe` e fan-out em memoria: uma conexao em modo
+subscribe nao aceita outros comandos, e abrir uma por aba do editor esgotaria o limite do
+Redis com meia duzia de usuarios.
+
+---
+
+## D-035 — Moderacao e avaliacao existem como passo, nao como implementacao
+
+**Status:** aceita (Fase 5) · substituir na Fase 10
+
+O pipeline tem `MODERATING_INPUT`, `MODERATING_OUTPUT` e `EVALUATING` desde ja, com
+implementacoes declaradamente rasas: uma lista de termos e algumas verificacoes que nao
+exigem olhar a imagem (proporcao entregue, se as travas _podiam_ ser cumpridas).
+
+A escolha e ter o ponto de insercao e o estado correspondente no lugar certo, para que trocar
+por um servico externo seja substituir uma funcao — nao reescrever o worker e migrar dados.
+
+**Isto nao e seguranca.** A lista de termos nao entende contexto, idioma nem intencao, e e
+trivial de contornar. O `notEvaluated` no resultado e explicito sobre o que ainda nao e
+medido, para ninguem ler o score de aderencia como mais do que ele e.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

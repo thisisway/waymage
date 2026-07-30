@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 4 concluídas**. Próxima: Fase 5 — o primeiro marco funcional.
+Estado atual: **Fases 1 a 5 concluídas — o primeiro marco funcional existe.** Próxima: Fase 6 (créditos).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -95,21 +95,30 @@ análise de referência mais rica que cor dominante e dimensões.
 
 ---
 
-## 🔜 Fase 5 — Geração ponta a ponta (marco funcional)
+## ✅ Fase 5 — Geração ponta a ponta (marco funcional)
 
-- [ ] `packages/prompt-compiler` com snapshots de teste
-- [ ] Máquina de estados do `GenerationJob`, transições validadas e testadas
-- [ ] `POST /generation-jobs` com idempotency key
-- [ ] Worker: moderar → compilar → rotear → gerar → armazenar → avaliar
-- [ ] `GET /generation-jobs/:id/events` (SSE)
-- [ ] Grade de 4 resultados no canvas
-- [ ] Resumo da cena e custo estimado antes de gerar
+- [x] `packages/prompt-compiler` — 10 seções do blueprint, snapshots de teste (D-032)
+- [x] Máquina de estados com transições validadas em todo passo (D-033)
+- [x] `POST /generation-jobs` com idempotency key e snapshot automático da cena
+- [x] Worker: moderar → compilar → rotear → gerar → armazenar → avaliar
+- [x] `GET /generation-jobs/:id/events` (SSE com heartbeat, D-034)
+- [x] Grade de resultados com seleção e score de aderência
+- [x] Resumo, provedor, custo e tempo estimados antes de gerar
+- [x] `PromptCompilation` e `ProviderRun` persistidos — nunca só o prompt
+- [x] `DevController` removido: a rota real de geração o substituiu
 
-**Aceite:** clicar em Gerar produz 4 placeholders com progresso real, sem chave de API.
+**Aceite (verificado):** clicar em Gerar produz **4 imagens** com progresso real chegando por
+SSE (`SUBMITTING → PROCESSING → DOWNLOADING → MODERATING_OUTPUT → EVALUATING → COMPLETED`),
+sem nenhuma chave de API. A mesma idempotency key devolve o mesmo job. O banco guarda o
+SceneSpec normalizado, o prompt, o negative prompt e a versão do compilador — e nenhuma URL
+assinada.
+
+**Pendente da fase:** reserva e captura de créditos (Fase 6) — o job registra a estimativa mas
+ainda não debita; variação e refinamento (Fase 7).
 
 ---
 
-## ⬜ Fase 6 — Créditos
+## 🔜 Fase 6 — Créditos
 
 - [ ] `CreditWallet` + `CreditTransaction` (ledger append-only)
 - [ ] `estimate → reserve → capture → release → refund`

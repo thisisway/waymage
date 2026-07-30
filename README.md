@@ -7,9 +7,10 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fases 1 a 4 concluídas.** Já dá para criar conta, projeto e cena, editar o
-> SceneSpec com autosave e versionamento, e anexar referências com função e peso. Falta a
-> geração em si — próxima fase. Tudo roda com um provedor falso, sem nenhuma chave de API.
+> **Estado: Fases 1 a 5 concluídas — o fluxo principal funciona.** Criar conta, projeto e
+> cena, editar o SceneSpec, anexar referências e **gerar imagens**, com progresso em tempo
+> real e grade de resultados. Tudo com um provedor falso, sem nenhuma chave de API. Falta
+> créditos, edição por máscara e provedores reais.
 > Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
@@ -65,9 +66,10 @@ As portas de infraestrutura são deslocadas das padrão — Postgres em **5442**
 curl http://localhost:3333/health
 ```
 
-Depois abra http://localhost:3000, crie uma conta, um projeto e uma cena. O cadastro já cria
-o workspace e a carteira de créditos junto; a cena nasce com um SceneSpec válido e o editor
-salva sozinho 800 ms depois de cada alteração.
+Depois abra http://localhost:3000, crie uma conta, um projeto e uma cena, e clique em
+**Gerar**. O cadastro já cria o workspace e a carteira; a cena nasce com um SceneSpec válido,
+o editor salva sozinho 800 ms depois de cada alteração, e a geração produz 4 imagens com
+progresso em tempo real — sem nenhuma chave de API.
 
 ---
 
@@ -127,7 +129,8 @@ apps/
 
 packages/
   scene-spec/          Schema Zod do SceneSpec, tipos, validação de conflitos
-  domain/              Contratos compartilhados api ↔ worker (fila, eventos)
+  prompt-compiler/     SceneSpec → prompt, por seções e por capabilities do provedor
+  domain/              Contratos api ↔ worker: fila, eventos, máquina de estados
   provider-sdk/        Interface ImageProvider + FakeImageProvider
   storage/             Adapter S3/MinIO e convenção de chaves
   database/            Prisma schema, migrations e client gerado

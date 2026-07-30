@@ -1,9 +1,8 @@
-import { Module, type DynamicModule } from '@nestjs/common';
-import { AuditModule } from './audit/audit.module';
+import { Module } from '@nestjs/common';
 import { AssetsModule } from './assets/assets.module';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
-import { env } from './config/env';
-import { DevController } from './dev/dev.controller';
+import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
 import { InfraModule } from './infra/infra.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -26,14 +25,9 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     ProjectsModule,
     ScenesModule,
     AssetsModule,
+    GenerationsModule,
     QueueModule,
     HealthModule,
   ],
-  controllers: devControllers(),
 })
 export class AppModule {}
-
-/** Controllers de smoke só existem fora de produção. */
-function devControllers(): NonNullable<DynamicModule['controllers']> {
-  return env.NODE_ENV === 'production' ? [] : [DevController];
-}
