@@ -17,7 +17,8 @@ import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
 import { useGeneration } from '../../../lib/use-generation';
-import { INSPECTOR_SECTIONS, SECTION_LABELS, useEditorStore } from '../../../stores/editor-store';
+import { ScenePreview } from '../../../components/scene-preview';
+import { useEditorStore } from '../../../stores/editor-store';
 
 /**
  * Editor de cena.
@@ -136,8 +137,7 @@ export default function SceneEditorPage() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r border-surface-border bg-surface-raised p-3">
-          <SectionNav />
+        <aside className="w-60 shrink-0 overflow-y-auto border-r border-surface-border bg-surface-raised p-3">
           <LibraryPanel projectId={scene.projectId} spec={scene.sceneSpec} onChange={updateSpec} />
         </aside>
         <Canvas
@@ -160,7 +160,6 @@ export default function SceneEditorPage() {
   );
 }
 
-/** Componente próprio para que o título acompanhe a seção pelo hook, e não por leitura única. */
 function InspectorPanel({
   scene,
   onChange,
@@ -170,15 +169,10 @@ function InspectorPanel({
   onChange: (spec: SceneSpec) => void;
   disabled: boolean;
 }) {
-  const section = useEditorStore((s) => s.section);
-
   return (
-    <aside className="w-80 shrink-0 overflow-y-auto border-l border-surface-border bg-surface-raised p-4">
-      <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-ink-muted">
-        {SECTION_LABELS[section]}
-      </h2>
-      <Inspector spec={scene.sceneSpec} onChange={onChange} disabled={disabled} />
+    <aside className="w-[22rem] shrink-0 overflow-y-auto border-l border-surface-border bg-surface-base p-3">
       <Issues scene={scene} />
+      <Inspector spec={scene.sceneSpec} onChange={onChange} disabled={disabled} />
     </aside>
   );
 }
@@ -261,35 +255,6 @@ function ModeSelector() {
   );
 }
 
-function SectionNav() {
-  const { section, setSection } = useEditorStore();
-  return (
-    <nav>
-      <h2 className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-muted">
-        Cena
-      </h2>
-      <ul className="space-y-0.5">
-        {INSPECTOR_SECTIONS.map((item) => (
-          <li key={item}>
-            <button
-              type="button"
-              onClick={() => setSection(item)}
-              aria-current={section === item ? 'true' : undefined}
-              className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                section === item
-                  ? 'bg-surface-overlay text-ink-primary'
-                  : 'text-ink-secondary hover:bg-surface-overlay'
-              }`}
-            >
-              {SECTION_LABELS[item]}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 /** Área central: resultados, progresso e resumo do que será gerado. */
 function Canvas({
   scene,
@@ -312,7 +277,7 @@ function Canvas({
     <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8">
       {comparing.length === 2 ? (
         <ResultCompare results={results} selectedIds={comparing} onClose={onClearCompare} />
-      ) : (
+      ) : results.length > 0 ? (
         <ResultsGrid
           job={generation.job}
           placeholders={scene.sceneSpec.output.count}
@@ -321,6 +286,10 @@ function Canvas({
           comparing={comparing}
           onToggleCompare={onToggleCompare}
         />
+      ) : (
+        // Antes da primeira geração, o centro mostra a composição ao vivo em vez de
+        // retângulos vazios: cada ajuste no inspetor tem resposta imediata aqui.
+        <ScenePreview spec={scene.sceneSpec} />
       )}
 
       <GenerationProgressBar state={generation} />
@@ -336,38 +305,33 @@ function Canvas({
   );
 }
 
+/**
+ * Conflitos da cena, no topo do inspetor.
+ *
+ * Fica acima e não abaixo porque um erro bloqueia a geração: descobri-lo depois de rolar oito
+ * cartões é tarde demais.
+ */
 function Issues({ scene }: { scene: Scene }) {
-  if (scene.issues.length === 0) {
-    return (
-      <p className="mt-6 border-t border-surface-border pt-4 text-xs text-state-ok">
-        Nenhum conflito detectado.
-      </p>
-    );
-  }
+  if (scene.issues.length === 0) return null;
 
-  const tone = {
-    error: 'text-state-error',
-    warning: 'text-state-warn',
-    suggestion: 'text-ink-muted',
+  const style = {
+    error: 'border-state-error/40 bg-state-error/10 text-state-error',
+    warning: 'border-state-warn/40 bg-state-warn/10 text-state-warn',
+    suggestion: 'border-surface-border bg-surface-raised text-ink-muted',
   } as const;
 
   return (
-    <div className="mt-6 border-t border-surface-border pt-4">
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-muted">
-        Validação
-      </h3>
-      <ul className="space-y-2.5">
-        {scene.issues.map((issue) => (
-          <li key={issue.code} className="text-xs leading-relaxed">
-            <span className={tone[issue.level]}>{issue.level}</span>{' '}
-            <span className="text-ink-secondary">{issue.message}</span>
-            {issue.suggestion && (
-              <span className="mt-0.5 block text-ink-muted">{issue.suggestion}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className="mb-2.5 space-y-1.5">
+      {scene.issues.map((issue) => (
+        <li
+          key={issue.code}
+          className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${style[issue.level]}`}
+        >
+          {issue.message}
+          {issue.suggestion && <span className="mt-1 block opacity-80">{issue.suggestion}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 

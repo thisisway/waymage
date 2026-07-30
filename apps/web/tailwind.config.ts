@@ -13,6 +13,7 @@ export default {
           base: '#0d0e12',
           raised: '#15171d',
           overlay: '#1c1f27',
+          hover: '#232733',
           border: '#282c37',
         },
         ink: {

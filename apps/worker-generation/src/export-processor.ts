@@ -1,7 +1,7 @@
 import { AssetKind, AssetStatus, ExportStatus, type PrismaClient } from '@waymage/database';
 import { exportJobPayloadSchema } from '@waymage/domain';
 import { type StorageService, storageKeys } from '@waymage/storage';
-import type { Job } from 'bullmq';
+import { UnrecoverableError, type Job } from 'bullmq';
 import type { Logger } from 'pino';
 import sharp from 'sharp';
 
@@ -125,6 +125,24 @@ export async function processExportJob(
       },
     });
     log.error({ err: error }, 'Falha ao exportar');
+
+    // Objeto ausente no bucket não reaparece por insistência: repetir só gasta CPU e enche
+    // o log. `UnrecoverableError` diz ao BullMQ para não tentar de novo.
+    if (isMissingObject(error)) {
+      throw new UnrecoverableError(
+        error instanceof Error ? error.message : 'Arquivo de origem não encontrado',
+      );
+    }
     throw error;
   }
+}
+
+/** O erro do S3 para objeto inexistente é permanente, não transitório. */
+function isMissingObject(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error.name === 'NoSuchKey' || error.name === 'NotFound')
+  );
 }
