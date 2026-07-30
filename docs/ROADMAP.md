@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1 e 2 concluídas**. Próxima: Fase 3 (cenas, versões e autosave).
+Estado atual: **Fases 1, 2 e 3 concluídas**. Próxima: Fase 4 (assets e referências).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -53,20 +53,28 @@ e-mail) e troca de workspace ativo na UI (hoje o guard usa a associação mais a
 
 ---
 
-## 🔜 Fase 3 — Cenas, versões e autosave
+## ✅ Fase 3 — Cenas, versões e autosave
 
-- [ ] `Scene` CRUD
-- [ ] `SceneVersion` imutável, `parentVersionId`, `changeSummary`, duplicação
-- [ ] Autosave: debounce 800 ms, `revision` otimista, detecção de conflito
-- [ ] Estados `salvando` / `salvo` / `erro`
-- [ ] Painel direito de propriedades do SceneSpec com validação inline
-- [ ] Snapshot explícito antes de gerar
+- [x] `Scene` CRUD com rascunho mutável separado dos snapshots (D-024)
+- [x] `SceneVersion` imutável, `parentVersionId`, `changeSummary`, duplicação
+- [x] Autosave: debounce 800 ms, compare-and-swap no banco, 409 em conflito (D-025)
+- [x] Indicador `salvando` / `salvo` / `conflito` / `erro`, com `aria-live`
+- [x] Inspetor com as 8 seções do SceneSpec e validação inline
+- [x] Linha do tempo das versões
+- [x] TanStack Query para dado do servidor, Zustand para o editor (D-027)
+- [x] CI no GitHub Actions: lint, typecheck, testes, build e as 3 imagens
 
-**Aceite:** editar, recarregar, estado preservado; navegar entre duas versões.
+**Aceite (verificado):** editar e recarregar preserva o trabalho; a segunda aba salvando com
+revisão velha recebe `SCENE_REVISION_CONFLICT` com `currentRevision`, e o valor da primeira
+permanece; snapshot congela o rascunho e não muda quando o rascunho evolui; as 8 rotas novas
+respondem 404 cross-tenant.
+
+**Pendente da fase:** restaurar uma versão antiga para o rascunho (a duplicação cria cena
+nova; restaurar entra na Fase 7 com a linha do tempo interativa).
 
 ---
 
-## ⬜ Fase 4 — Assets e referências
+## 🔜 Fase 4 — Assets e referências
 
 - [ ] `POST /assets/upload-url` (URL assinada) → PUT direto → `POST /assets/complete`
 - [ ] Validação de MIME real (magic bytes), tamanho e hash
@@ -152,7 +160,7 @@ e-mail) e troca de workspace ativo na UI (hoje o guard usa a associação mais a
 - [ ] Rate limiting, CSP, headers de segurança
 - [ ] Acessibilidade e performance
 - [ ] OpenTelemetry + Sentry
-- [ ] CI: install → lint → typecheck → test → build → migrations check → scan
+- [ ] Scan de container e `pnpm audit` no CI (o pipeline base já existe desde a Fase 3)
 - [ ] Runbook de rollback
 
 ---

@@ -30,23 +30,3 @@ export const loginSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
-
-export const createWorkspaceSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-});
-
-export const inviteMemberSchema = z.object({
-  email,
-  role: z.enum(['ADMIN', 'MEMBER', 'VIEWER']),
-});
-
-export const createProjectSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(2000).optional(),
-});
-
-export const updateProjectSchema = createProjectSchema.partial();
-
-export type CreateProjectInput = z.infer<typeof createProjectSchema>;
-export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
-export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;

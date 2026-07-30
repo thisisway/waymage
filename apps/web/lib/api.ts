@@ -1,3 +1,5 @@
+import type { SceneSpec } from '@waymage/scene-spec';
+
 /** URL base da API. Injetada em build (next.config.mjs) — nunca contém segredo. */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
 
@@ -108,6 +110,43 @@ export interface Project {
   updatedAt: string;
 }
 
+export interface ValidationIssue {
+  code: string;
+  level: 'error' | 'warning' | 'suggestion';
+  path: string;
+  message: string;
+  suggestion?: string;
+}
+
+/** O tipo do `sceneSpec` vem de @waymage/scene-spec — mesmo schema que a API valida. */
+export interface Scene {
+  id: string;
+  projectId: string;
+  name: string;
+  sceneSpec: SceneSpec;
+  revision: number;
+  currentVersionId: string | null;
+  issues: ValidationIssue[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SceneSummary {
+  id: string;
+  name: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface SceneVersion {
+  id: string;
+  versionNumber: number;
+  changeSummary: string | null;
+  parentVersionId: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string } | null;
+}
+
 // ── Operações ────────────────────────────────────────────────────────────────
 
 export async function fetchHealth(): Promise<HealthReport> {
@@ -129,6 +168,34 @@ export const api = {
 
   listProjects: () => apiFetch<Project[]>('/projects'),
 
+  getProject: (projectId: string) => apiFetch<Project>(`/projects/${projectId}`),
+
   createProject: (input: { name: string; description?: string }) =>
     apiFetch<Project>('/projects', { method: 'POST', body: input }),
+
+  listScenes: (projectId: string) => apiFetch<SceneSummary[]>(`/projects/${projectId}/scenes`),
+
+  createScene: (projectId: string, input: { name: string }) =>
+    apiFetch<Scene>(`/projects/${projectId}/scenes`, { method: 'POST', body: input }),
+
+  getScene: (sceneId: string) => apiFetch<Scene>(`/scenes/${sceneId}`),
+
+  /** Autosave. `revision` é o que detecta que outra aba salvou por cima. */
+  saveScene: (sceneId: string, input: { revision: number; name?: string; sceneSpec?: unknown }) =>
+    apiFetch<Scene>(`/scenes/${sceneId}`, { method: 'PATCH', body: input }),
+
+  listVersions: (sceneId: string) => apiFetch<SceneVersion[]>(`/scenes/${sceneId}/versions`),
+
+  createVersion: (sceneId: string, input: { changeSummary?: string }) =>
+    apiFetch<SceneVersion>(`/scenes/${sceneId}/versions`, { method: 'POST', body: input }),
+};
+
+/** Chaves de cache do TanStack Query, num lugar só para não divergirem entre telas. */
+export const queryKeys = {
+  session: ['session'] as const,
+  projects: ['projects'] as const,
+  project: (id: string) => ['projects', id] as const,
+  scenes: (projectId: string) => ['projects', projectId, 'scenes'] as const,
+  scene: (id: string) => ['scenes', id] as const,
+  versions: (sceneId: string) => ['scenes', sceneId, 'versions'] as const,
 };

@@ -237,14 +237,24 @@ model Project {
   @@map("projects")
 }
 
+/// Uma cena tem duas faces: o rascunho editável (`draftSpec`) e os snapshots imutáveis
+/// (`SceneVersion`).
+///
+/// O autosave escreve no rascunho — versionar cada tecla digitada geraria milhares de
+/// versões inúteis. Snapshots são criados explicitamente e antes de cada geração, o que
+/// mantém a garantia que importa: toda imagem gerada aponta para um SceneSpec imutável.
 model Scene {
   id               String    @id @default(uuid()) @db.Uuid
   workspaceId      String    @db.Uuid
   projectId        String    @db.Uuid
   name             String
-  /// Versão exibida no editor. As versões em si são imutáveis.
+  /// Rascunho de trabalho, alvo do autosave. Validado por @waymage/scene-spec antes de gravar.
+  draftSpec        Json
+  /// Versão do schema do SceneSpec com que o rascunho foi gravado (ex.: "1.0").
+  specVersion      String
+  /// Último snapshot criado. As versões em si são imutáveis.
   currentVersionId String?   @unique @db.Uuid
-  /// Contador otimista do autosave (blueprint §24).
+  /// Contador otimista do autosave (blueprint §24). Incrementado a cada gravação aceita.
   revision         Int       @default(0)
   createdAt        DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(6)

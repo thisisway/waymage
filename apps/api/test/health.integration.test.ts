@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
-import { HttpExceptionFilter } from '../src/common/http-exception.filter';
 
 /**
  * Health precisa responder SEM sessão.

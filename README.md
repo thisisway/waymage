@@ -7,9 +7,10 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fases 1 e 2 concluídas.** Já dá para criar conta, entrar e gerenciar projetos com
-> isolamento entre workspaces. Ainda não há cenas, upload nem geração pela UI. Tudo roda com
-> um provedor falso, sem nenhuma chave de API. Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Estado: Fases 1, 2 e 3 concluídas.** Já dá para criar conta, projeto e cena, e editar o
+> SceneSpec com autosave, versionamento e validação inline. Ainda não há upload de
+> referências nem geração pela UI. Tudo roda com um provedor falso, sem nenhuma chave de
+> API. Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
@@ -64,8 +65,9 @@ As portas de infraestrutura são deslocadas das padrão — Postgres em **5442**
 curl http://localhost:3333/health
 ```
 
-Depois abra http://localhost:3000, crie uma conta e um projeto. O cadastro já cria o
-workspace e a carteira de créditos junto.
+Depois abra http://localhost:3000, crie uma conta, um projeto e uma cena. O cadastro já cria
+o workspace e a carteira de créditos junto; a cena nasce com um SceneSpec válido e o editor
+salva sozinho 800 ms depois de cada alteração.
 
 ---
 
@@ -146,8 +148,10 @@ elimina divergência de validação entre as camadas.
 SceneSpec → validação de conflitos → prompt compiler → ImageProvider → storage
 ```
 
-Cada alteração de cena cria uma `SceneVersion` imutável, e toda geração aponta para uma
-versão específica: sempre dá para saber exatamente o que gerou uma imagem.
+A cena tem duas faces: um **rascunho** editável, onde o autosave escreve, e **snapshots
+imutáveis** (`SceneVersion`), criados explicitamente e antes de cada geração. Assim toda
+imagem gerada aponta para um SceneSpec que não muda mais, sem gerar uma versão por tecla
+digitada ([D-024](docs/DECISIONS.md#d-024)).
 
 ### Sessão e isolamento
 

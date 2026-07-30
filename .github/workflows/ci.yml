@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela execuções antigas do mesmo branch: só o último commit interessa.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Os testes de integração falam com banco, fila e storage de verdade. O risco que
+    # eles cobrem — um `where` sem `workspaceId` — não aparece contra mock.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: waymage
+          POSTGRES_PASSWORD: waymage
+          POSTGRES_DB: waymage
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U waymage -d waymage"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+      # Imagem da Bitnami porque service container do Actions não aceita `command`, e a
+      # imagem oficial do MinIO exige `server /data`. Esta sobe sozinha e ainda cria o bucket.
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+          MINIO_DEFAULT_BUCKETS: waymage-dev
+        ports: ['9000:9000']
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://waymage:waymage@localhost:5432/waymage?schema=public
+      REDIS_URL: redis://localhost:6379
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: waymage-dev
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_FORCE_PATH_STYLE: 'true'
+      # Valor de teste, descartável. Segredo real nunca entra em workflow.
+      JWT_ACCESS_SECRET: ci-somente-para-testes-0000000000000000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile`: se o lockfile estiver desatualizado, o CI falha em vez de
+      # instalar versões diferentes das que foram testadas localmente.
+      - run: pnpm install --frozen-lockfile
+
+      - name: Gerar Prisma Client
+        run: pnpm db:generate
+
+      # `migrate deploy`, nunca `dev`: só aplica migrations já versionadas. Falha aqui
+      # significa migration quebrada, que é exatamente o que queremos pegar antes do deploy.
+      - name: Aplicar migrations
+        run: pnpm db:deploy
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Verificar formatação
+        run: pnpm format:check
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Build das imagens só depois de os testes passarem: buildar código quebrado é desperdício.
+    needs: check
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, worker-generation, web]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build sem push: valida que a imagem monta. Publicar é decisão de deploy, não de CI.
+      - name: Build da imagem ${{ matrix.app }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max

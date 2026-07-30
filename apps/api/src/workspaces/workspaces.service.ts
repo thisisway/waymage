@@ -3,7 +3,7 @@ import { WorkspaceRole } from '@waymage/database';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { PrismaService } from '../infra/prisma.service';
-import type { InviteMemberInput } from '../auth/auth.schemas';
+import type { InviteMemberInput } from './workspaces.schemas';
 import type { RequestPrincipal } from '../auth/request-user';
 
 export interface WorkspaceView {

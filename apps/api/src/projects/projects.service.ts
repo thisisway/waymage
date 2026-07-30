@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../common/app-error';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../infra/prisma.service';
-import type { CreateProjectInput, UpdateProjectInput } from '../auth/auth.schemas';
+import type { CreateProjectInput, UpdateProjectInput } from './projects.schemas';
 import type { RequestPrincipal } from '../auth/request-user';
 
 export interface ProjectView {

@@ -6,7 +6,10 @@ import { SCENE_SPEC_VERSION } from './version';
  * Todas devem passar em `parseSceneSpec` — há teste garantindo isso.
  */
 
-/** Cena vazia com que o editor abre uma nova cena. */
+/**
+ * Cena vazia. O estado inicial de verdade vive em `createEmptySceneSpec()`, no código de
+ * produção — isto aqui é só o mesmo formato mínimo, para os testes não dependerem daquele.
+ */
 export const emptySceneSpec: SceneSpecInput = {
   version: SCENE_SPEC_VERSION,
   intent: { purpose: 'other' },

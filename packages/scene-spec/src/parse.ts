@@ -55,3 +55,19 @@ export function createSceneSpec(
 ): SceneSpec {
   return parseSceneSpec({ ...seed, version: SCENE_SPEC_VERSION });
 }
+
+/**
+ * Estado inicial de uma cena nova no editor.
+ *
+ * Os textos são marcadores, não conteúdo: existem para que o SceneSpec seja válido desde o
+ * primeiro instante e o usuário veja o formulário preenchido com a forma esperada, em vez de
+ * campos vazios com mensagens de erro antes de digitar qualquer coisa.
+ */
+export function createEmptySceneSpec(): SceneSpec {
+  return createSceneSpec({
+    intent: { purpose: 'other' },
+    subject: { type: 'person', description: 'sujeito a definir' },
+    scene: { location: 'cenário a definir' },
+    camera: { shot: 'waist_up' },
+  });
+}

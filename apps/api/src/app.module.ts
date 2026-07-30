@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { InfraModule } from './infra/infra.module';
 import { ProjectsModule } from './projects/projects.module';
 import { QueueModule } from './queue/queue.module';
+import { ScenesModule } from './scenes/scenes.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 
 /**
@@ -22,6 +23,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     AuthModule,
     WorkspacesModule,
     ProjectsModule,
+    ScenesModule,
     QueueModule,
     HealthModule,
   ],

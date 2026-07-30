@@ -364,6 +364,77 @@ restart. Está corrigido e coberto por `test/health.integration.test.ts`, para n
 
 ---
 
+## D-024 — Rascunho mutável + snapshots imutáveis
+
+**Status:** aceita (Fase 3)
+
+O blueprint pede duas coisas que, lidas ao pé da letra, se contradizem: autosave com debounce
+de 800 ms (§24) e versões imutáveis às quais toda geração aponta (§31, regra 4). Versionar a
+cada gravação do autosave produziria milhares de `SceneVersion` por sessão de edição.
+
+A cena passou a ter duas faces:
+
+- **`Scene.draftSpec`** — o rascunho de trabalho, alvo do autosave. Muda o tempo todo.
+- **`SceneVersion`** — snapshots imutáveis, criados explicitamente e (a partir da Fase 5)
+  automaticamente antes de cada geração.
+
+A garantia que importava fica de pé: toda imagem gerada aponta para um SceneSpec que não
+muda mais. O que se descarta é a ideia de que cada tecla digitada merece um número de versão.
+
+---
+
+## D-025 — Autosave é compare-and-swap no banco
+
+**Status:** aceita (Fase 3)
+
+Duas abas abertas na mesma cena é situação comum, não exceção. Ler o registro, comparar a
+revisão em memória e depois escrever deixa uma janela entre a leitura e a escrita — a segunda
+aba sobrescreve a primeira e ninguém percebe.
+
+O `UPDATE` casa `revision` junto do `id`:
+
+```ts
+updateMany({ where: { id, workspaceId, deletedAt: null, revision }, data: { revision: { increment: 1 }, ... } })
+```
+
+Zero linhas afetadas significa uma de duas coisas, e a resposta precisa distinguir: a cena
+não existe → **404**; existe mas mudou → **409** com `currentRevision`, para o editor mostrar
+o conflito em vez de perder o trabalho. No cliente, conflito **trava** o autosave: continuar
+tentando sobrescreveria o trabalho da outra aba.
+
+O hook também serializa as gravações. Sem isso, duas respostas podem voltar fora de ordem e a
+mais antiga sobrescrever a mais nova — bug que só aparece com rede lenta e é quase impossível
+de reproduzir depois.
+
+---
+
+## D-026 — A UI deriva suas opções do schema Zod
+
+**Status:** aceita (Fase 3)
+
+Os `<select>` do inspetor são preenchidos com `shotSchema.options`, `purposeSchema.options` e
+afins — nunca com listas escritas à mão. Assim a interface não consegue oferecer um valor que
+a API recusaria, e acrescentar uma opção no schema a faz aparecer no editor sozinha.
+
+O que é traduzido é só o rótulo (`components/inspector/labels.ts`). Os **valores** continuam
+em inglês porque são contrato: o prompt compiler e os adapters de provedor dependem deles.
+
+---
+
+## D-027 — TanStack Query para dado do servidor, Zustand só para o editor
+
+**Status:** aceita (Fase 3) · blueprint §23
+
+Cena, versões e projetos vivem no cache do TanStack Query. O store do Zustand guarda apenas
+estado local do editor: seção aberta, modo de complexidade e, mais adiante, ferramenta ativa
+e máscara em edição.
+
+Copiar o SceneSpec para dentro do store criaria uma segunda fonte da verdade, e a divergência
+entre as duas é exatamente a classe de bug que a separação do blueprint evita. A edição
+atualiza o cache diretamente (`setQueryData`) e o autosave confirma com o servidor.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

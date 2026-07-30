@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { WorkspaceRole } from '@waymage/database';
 import { RequireRole } from '../auth/auth.guard';
-import { inviteMemberSchema, type InviteMemberInput } from '../auth/auth.schemas';
+import { inviteMemberSchema, type InviteMemberInput } from './workspaces.schemas';
 import {
   CurrentUser,
   Principal,

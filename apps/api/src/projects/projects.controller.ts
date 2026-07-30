@@ -18,7 +18,7 @@ import {
   updateProjectSchema,
   type CreateProjectInput,
   type UpdateProjectInput,
-} from '../auth/auth.schemas';
+} from './projects.schemas';
 import { Principal, type AuthenticatedRequest, type RequestPrincipal } from '../auth/request-user';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ProjectsService, type ProjectView } from './projects.service';

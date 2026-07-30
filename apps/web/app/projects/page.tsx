@@ -1,78 +1,55 @@
 'use client';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiError, api, type Project, type SessionUser } from '../../lib/api';
+import type { FormEvent } from 'react';
+import { ApiError, api, queryKeys } from '../../lib/api';
 
-type State =
-  | { kind: 'loading' }
-  | { kind: 'ready'; user: SessionUser; projects: Project[] }
-  | { kind: 'error'; message: string };
-
-/**
- * Lista de projetos do workspace.
- *
- * Componente cliente e não server component: a sessão vive num cookie do browser, e
- * renderizar no servidor exigiria repassar o cookie do request Next para a API — indireção
- * sem ganho enquanto a página é interativa de qualquer forma. Migra para TanStack Query na
- * Fase 3, quando houver cache de cenas e versões para coordenar.
- */
 export default function ProjectsPage() {
   const router = useRouter();
-  const [state, setState] = useState<State>({ kind: 'loading' });
-  const [creating, setCreating] = useState(false);
+  const queryClient = useQueryClient();
 
-  const load = useCallback(async () => {
-    try {
-      const [{ user }, projects] = await Promise.all([api.me(), api.listProjects()]);
-      setState({ kind: 'ready', user, projects });
-    } catch (caught) {
-      // 401 é o caminho normal de quem não entrou ainda, não um erro a exibir.
-      if (caught instanceof ApiError && caught.status === 401) {
-        router.replace('/login');
-        return;
-      }
-      setState({
-        kind: 'error',
-        message:
-          caught instanceof ApiError
-            ? caught.message
-            : 'Não foi possível conectar à API. Ela está rodando?',
-      });
-    }
-  }, [router]);
+  const session = useQuery({ queryKey: queryKeys.session, queryFn: () => api.me() });
+  const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.listProjects() });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const createProject = useMutation({
+    mutationFn: (name: string) => api.createProject({ name }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projects }),
+  });
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  const error = session.error ?? projects.error;
+
+  // 401 é o caminho normal de quem ainda não entrou, não um erro a exibir.
+  if (error instanceof ApiError && error.status === 401) {
+    router.replace('/login');
+    return null;
+  }
+
+  if (error) {
+    return (
+      <Centered tone="error">
+        {error instanceof ApiError
+          ? error.message
+          : 'Não foi possível conectar à API. Ela está rodando?'}
+      </Centered>
+    );
+  }
+
+  if (!session.data || !projects.data) return <Centered>Carregando…</Centered>;
+
+  function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const name = String(new FormData(form).get('name') ?? '').trim();
     if (!name) return;
-
-    setCreating(true);
-    try {
-      await api.createProject({ name });
-      form.reset();
-      await load();
-    } finally {
-      setCreating(false);
-    }
+    createProject.mutate(name);
+    form.reset();
   }
 
   async function handleLogout() {
     await api.logout().catch(() => undefined);
+    queryClient.clear();
     router.replace('/login');
-  }
-
-  if (state.kind === 'loading') {
-    return <Centered>Carregando…</Centered>;
-  }
-
-  if (state.kind === 'error') {
-    return <Centered tone="error">{state.message}</Centered>;
   }
 
   return (
@@ -80,7 +57,7 @@ export default function ProjectsPage() {
       <header className="flex items-center justify-between border-b border-surface-border bg-surface-raised px-6 py-3">
         <span className="text-sm font-semibold tracking-tight">Waymage</span>
         <div className="flex items-center gap-4 text-xs text-ink-secondary">
-          <span>{state.user.email}</span>
+          <span>{session.data.user.email}</span>
           <button type="button" onClick={handleLogout} className="hover:text-ink-primary">
             Sair
           </button>
@@ -102,31 +79,33 @@ export default function ProjectsPage() {
           />
           <button
             type="submit"
-            disabled={creating}
+            disabled={createProject.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-surface-base disabled:opacity-50"
           >
-            {creating ? 'Criando…' : 'Criar'}
+            {createProject.isPending ? 'Criando…' : 'Criar'}
           </button>
         </form>
 
-        {state.projects.length === 0 ? (
+        {projects.data.length === 0 ? (
           <p className="mt-8 text-sm text-ink-muted">
             Nenhum projeto ainda. Crie o primeiro acima.
           </p>
         ) : (
           <ul className="mt-6 space-y-2">
-            {state.projects.map((project) => (
-              <li
-                key={project.id}
-                className="rounded-md border border-surface-border bg-surface-raised px-4 py-3"
-              >
-                <div className="text-sm text-ink-primary">{project.name}</div>
-                {project.description && (
-                  <div className="mt-0.5 text-xs text-ink-secondary">{project.description}</div>
-                )}
-                <div className="mt-1 text-xs text-ink-muted">
-                  atualizado em {new Date(project.updatedAt).toLocaleDateString('pt-BR')}
-                </div>
+            {projects.data.map((project) => (
+              <li key={project.id}>
+                <a
+                  href={`/projects/${project.id}`}
+                  className="block rounded-md border border-surface-border bg-surface-raised px-4 py-3 hover:border-ink-muted"
+                >
+                  <div className="text-sm text-ink-primary">{project.name}</div>
+                  {project.description && (
+                    <div className="mt-0.5 text-xs text-ink-secondary">{project.description}</div>
+                  )}
+                  <div className="mt-1 text-xs text-ink-muted">
+                    atualizado em {new Date(project.updatedAt).toLocaleDateString('pt-BR')}
+                  </div>
+                </a>
               </li>
             ))}
           </ul>
