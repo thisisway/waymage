@@ -11,6 +11,7 @@ import {
 } from '../../../components/generation-panel';
 import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
+import { CreditBadge } from '../../../components/credit-badge';
 import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
@@ -205,6 +206,7 @@ function TopBar({
       </div>
 
       <div className="flex items-center gap-3 text-xs">
+        <CreditBadge />
         <ModeSelector />
         <button
           type="button"

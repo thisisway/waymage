@@ -7,10 +7,10 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fases 1 a 5 concluídas — o fluxo principal funciona.** Criar conta, projeto e
-> cena, editar o SceneSpec, anexar referências e **gerar imagens**, com progresso em tempo
-> real e grade de resultados. Tudo com um provedor falso, sem nenhuma chave de API. Falta
-> créditos, edição por máscara e provedores reais.
+> **Estado: Fases 1 a 6 concluídas.** Criar conta, projeto e cena, editar o SceneSpec, anexar
+> referências, **gerar imagens** com progresso em tempo real, e um ledger de créditos que
+> reserva antes e devolve quando a geração falha. Tudo com um provedor falso, sem nenhuma
+> chave de API. Falta variação e refinamento, edição por máscara e provedores reais.
 > Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
@@ -130,6 +130,7 @@ apps/
 packages/
   scene-spec/          Schema Zod do SceneSpec, tipos, validação de conflitos
   prompt-compiler/     SceneSpec → prompt, por seções e por capabilities do provedor
+  billing/             Carteira e ledger append-only, usado por api e worker
   domain/              Contratos api ↔ worker: fila, eventos, máquina de estados
   provider-sdk/        Interface ImageProvider + FakeImageProvider
   storage/             Adapter S3/MinIO e convenção de chaves
@@ -155,6 +156,15 @@ A cena tem duas faces: um **rascunho** editável, onde o autosave escreve, e **s
 imutáveis** (`SceneVersion`), criados explicitamente e antes de cada geração. Assim toda
 imagem gerada aponta para um SceneSpec que não muda mais, sem gerar uma versão por tecla
 digitada ([D-024](docs/DECISIONS.md#d-024)).
+
+### Créditos
+
+Cada geração **reserva** créditos antes de começar e só os **captura** quando entrega imagem.
+Falha do provedor, timeout ou cancelamento devolvem tudo — o usuário só paga pelo que recebeu.
+Rejeição por política de conteúdo é a exceção, porque ali o pedido partiu dele.
+
+O ledger é append-only: nenhum saldo muda sem uma transação correspondente, e
+`GET /billing/reconcile` prova que a soma do extrato bate com o saldo.
 
 ### Sessão e isolamento
 

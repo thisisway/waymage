@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@waymage/billing": "workspace:*",
     "@waymage/database": "workspace:*",
     "@waymage/domain": "workspace:*",
     "@waymage/prompt-compiler": "workspace:*",

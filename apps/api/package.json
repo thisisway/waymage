@@ -16,6 +16,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-fastify": "^11.0.1",
+    "@waymage/billing": "workspace:*",
     "@waymage/database": "workspace:*",
     "@waymage/domain": "workspace:*",
     "@waymage/prompt-compiler": "workspace:*",

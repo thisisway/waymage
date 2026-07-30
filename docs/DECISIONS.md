@@ -588,6 +588,110 @@ medido, para ninguem ler o score de aderencia como mais do que ele e.
 
 ---
 
+## D-036 — Saldo negativo impossivel por constraint, nao por checagem
+
+**Status:** aceita (Fase 6)
+
+O blueprint §15.1 exige "impedir saldo negativo". Verificar em codigo protege o caminho
+conhecido; a constraint `CHECK (balance >= 0)` protege contra o desconhecido — um script de
+manutencao, uma correcao manual em producao, um caminho novo com bug. O banco recusa e a
+transacao inteira volta atras.
+
+Coberto por teste: uma escrita direta de `balance = -1` via Prisma e recusada pelo Postgres.
+
+**Credito e inteiro.** Ponto flutuante em dinheiro acumula erro de arredondamento que ninguem
+consegue explicar depois; `assertPositive` recusa valor nao inteiro na entrada.
+
+---
+
+## D-037 — Reserva e compare-and-swap, nao leitura seguida de escrita
+
+**Status:** aceita (Fase 6) · mesmo padrao da [D-025](#d-025)
+
+Duas geracoes simultaneas nao podem passar ambas pela verificacao de saldo. Ler, comparar em
+memoria e depois escrever deixa uma janela entre a leitura e a escrita — e nessa janela as
+duas veem saldo suficiente.
+
+A condicao faz parte da propria escrita:
+
+```ts
+updateMany({ where: { id, balance: { gte: amount } }, data: { balance: { decrement: amount }, ... } })
+```
+
+Zero linhas afetadas significa saldo insuficiente. O Postgres avalia isso atomicamente.
+
+Coberto por teste: dez reservas de 30 disparadas juntas contra 100 disponiveis — exatamente
+tres passam, e `balance + reserved` continua 100.
+
+Duas decisoes de implementacao vieram de falha real no teste: usar `findUnique` em vez de
+`upsert` (o upsert tomava lock de escrita antes de sabermos se havia saldo, serializando cedo
+demais) e elevar o timeout da transacao, porque o padrao de 5 s do Prisma derrubava as ultimas
+da fila.
+
+---
+
+## D-038 — Ledger append-only; o saldo e cache do extrato
+
+**Status:** aceita (Fase 6) · blueprint §15.2
+
+Nenhum saldo muda sem uma `CreditTransaction` correspondente, gravada na mesma transacao de
+banco. O extrato e a verdade; `wallet.balance` existe para nao somar a tabela inteira a cada
+leitura.
+
+`GET /billing/reconcile` soma todas as transacoes e compara com o saldo. Divergir significa
+que algum saldo mudou sem transacao — exatamente o que a regra proibe. Esta exposto de
+proposito: se acontecer, alguem precisa conseguir ver sem acesso ao banco.
+
+**Semantica dos movimentos:**
+
+| Movimento     | Disponivel | Reservado | Por que                                         |
+| ------------- | ---------- | --------- | ----------------------------------------------- |
+| `RESERVATION` | −N         | +N        | Sai do disponivel ao criar o job                |
+| `CAPTURE`     | —          | −N        | O disponivel ja saiu na reserva; some a reserva |
+| `RELEASE`     | +N         | −N        | Devolve por inteiro                             |
+
+`CAPTURE` grava `amount: 0` justamente porque nao move o disponivel — e o que mantem a soma do
+extrato igual ao saldo.
+
+---
+
+## D-039 — Quem paga a falha
+
+**Status:** aceita (Fase 6)
+
+A reserva acontece **antes** de enfileirar. Enfileirar primeiro abriria uma janela em que a
+geracao roda e o pagamento falha depois; e se a reserva falha, o job vai para `FAILED` em vez
+de ficar em `QUEUED`, senao o worker o pegaria e geraria de graca.
+
+No fim do pipeline, quem paga depende de quem falhou — e a classificacao ja existia em
+`ProviderError.refundable` desde a Fase 1:
+
+- **Falha do provedor, timeout, erro interno, cancelamento** → `release`. O usuario nao
+  recebeu imagem nenhuma; nao pode pagar.
+- **Rejeicao por politica de conteudo** → `capture`. O pedido partiu do usuario e o custo foi
+  incorrido.
+
+Toda operacao tem chave idempotente derivada do job (`reserve:<id>`, `capture:<id>`,
+`release:<id>`), garantida por indice unico. Um retry do worker nao cobra duas vezes.
+
+Falha ao acertar o credito e registrada mas **nao** substitui o erro original — esconder a
+causa raiz atras de um erro de contabilidade tornaria o incidente indecifravel.
+
+---
+
+## D-040 — 100 creditos de boas-vindas
+
+**Status:** aceita (Fase 6)
+
+Sem eles, a primeira coisa que o usuario encontra depois de se cadastrar e uma tela dizendo
+que nao pode gerar nada. Com o `FakeImageProvider` o custo real e zero; com provedor real,
+100 creditos sao 25 geracoes de rascunho — o suficiente para avaliar o produto.
+
+Concedido como `BONUS` com chave `welcome:<workspaceId>`, entao reprocessar o cadastro nao
+credita duas vezes.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

@@ -1,3 +1,4 @@
+import { captureCredits, recordUsage, releaseCredits } from '@waymage/billing';
 import {
   AssetKind,
   AssetStatus,
@@ -67,6 +68,7 @@ export async function processGenerationJob(
       requestedCount: true,
       providerStrategy: true,
       operationType: true,
+      reservedCredits: true,
       sceneVersion: { select: { id: true, sceneSpec: true } },
     },
   });
@@ -221,16 +223,58 @@ export async function processGenerationJob(
       ),
     );
 
+    // Entregou as imagens: o que estava reservado sai de vez.
+    if (record.reservedCredits > 0) {
+      await captureCredits(prisma, {
+        workspaceId: payload.workspaceId,
+        amount: record.reservedCredits,
+        generationJobId: record.id,
+        idempotencyKey: `capture:${record.id}`,
+      });
+    }
+
+    await recordUsage(prisma, {
+      workspaceId: payload.workspaceId,
+      generationJobId: record.id,
+      provider: provider.id,
+      imagesProduced: stored.length,
+      creditsCharged: record.reservedCredits,
+      externalCostCents: status.externalCostCents ?? 0,
+    });
+
     await advance('EVALUATING', 'COMPLETED', `${stored.length} imagens geradas`);
     await prisma.generationJob.update({
       where: { id: record.id },
-      data: { completedAt: new Date(), actualCredits: record.requestedCount },
+      data: { completedAt: new Date(), actualCredits: record.reservedCredits },
     });
 
     log.info({ count: stored.length, provider: provider.id }, 'Geração concluída');
     return { resultIds: stored.map((result) => result.id) };
   } catch (error) {
     const providerError = error instanceof ProviderError ? error : null;
+
+    /**
+     * Quem paga a falha.
+     *
+     * Falha de provedor, timeout e erro interno são nossos: o usuário não recebeu imagem
+     * nenhuma e o crédito volta. Rejeição por política de conteúdo é a exceção — ali o
+     * pedido partiu do usuário e o custo foi incorrido, então a reserva é capturada.
+     */
+    if (record.reservedCredits > 0) {
+      const refundable = providerError?.refundable ?? true;
+      const settle = refundable ? releaseCredits : captureCredits;
+
+      await settle(prisma, {
+        workspaceId: payload.workspaceId,
+        amount: record.reservedCredits,
+        generationJobId: record.id,
+        idempotencyKey: `${refundable ? 'release' : 'capture'}:${record.id}`,
+        note: refundable ? 'Falha na geração' : 'Rejeitado por política de conteúdo',
+      }).catch((settleError: unknown) => {
+        // Falha ao acertar o crédito não pode esconder o erro original.
+        log.error({ err: settleError }, 'Falha ao acertar créditos após erro de geração');
+      });
+    }
 
     await prisma.generationJob.update({
       where: { id: record.id },

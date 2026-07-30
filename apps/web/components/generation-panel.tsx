@@ -89,6 +89,14 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
       {failed && state.job?.errorMessage && (
         <p role="alert" className="mt-2 text-xs text-state-error">
           {state.job.errorMessage}
+          {state.job.errorCode === 'INSUFFICIENT_CREDITS' && (
+            <>
+              {' '}
+              <a href="/billing" className="underline">
+                ver créditos
+              </a>
+            </>
+          )}
         </p>
       )}
     </div>

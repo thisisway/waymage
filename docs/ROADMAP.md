@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 5 concluídas — o primeiro marco funcional existe.** Próxima: Fase 6 (créditos).
+Estado atual: **Fases 1 a 6 concluídas.** Próxima: Fase 7 (resultados: variação, refinamento, exportação).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -118,19 +118,29 @@ ainda não debita; variação e refinamento (Fase 7).
 
 ---
 
-## 🔜 Fase 6 — Créditos
+## ✅ Fase 6 — Créditos
 
-- [ ] `CreditWallet` + `CreditTransaction` (ledger append-only)
-- [ ] `estimate → reserve → capture → release → refund`
-- [ ] Idempotência transacional, saldo negativo impossível
-- [ ] `UsageLedger` com custo interno e custo do provedor
-- [ ] Telas de billing e consumo
+- [x] `packages/billing` — ledger append-only, usado por API e worker (D-038)
+- [x] `estimate → reserve → capture → release`, com chave idempotente derivada do job
+- [x] Saldo negativo impossível por `CHECK` no banco, não por checagem (D-036)
+- [x] Reserva por compare-and-swap: reservas simultâneas não estouram o saldo (D-037)
+- [x] `UsageLedger` com imagens produzidas, créditos cobrados e custo do provedor
+- [x] 100 créditos de boas-vindas no cadastro (D-040)
+- [x] Tela de créditos com extrato, e saldo na topbar do editor
+- [x] `GET /billing/reconcile` — conferência de integridade exposta
 
-**Aceite:** saldo insuficiente bloqueia antes de enfileirar; falha do provedor devolve reserva; soma do ledger = saldo.
+**Aceite (verificado):** saldo insuficiente devolve **402** e não enfileira nada; falha do
+provedor (`[[fail]]`) **devolve** os 4 créditos; rejeição por política de conteúdo
+(`[[blocked]]`) **cobra**; cancelar devolve por inteiro; dez reservas simultâneas contra saldo
+para três resultam em exatamente três aceitas; a soma do extrato bate com o saldo em todos os
+casos.
+
+**Pendente da fase:** compra de créditos (depende de gateway de pagamento) e limite por plano
+— `planCode` existe no workspace mas ainda não altera nada.
 
 ---
 
-## ⬜ Fase 7 — Resultados
+## 🔜 Fase 7 — Resultados
 
 - [ ] Seleção de resultado
 - [ ] `variation` e `refine`

@@ -220,6 +220,31 @@ export interface Estimate {
   canGenerate: boolean;
 }
 
+export interface Wallet {
+  /** Disponível para gastar. Já desconta o que está reservado. */
+  balance: number;
+  /** Preso em gerações em voo. Volta ao saldo se a geração falhar. */
+  reserved: number;
+}
+
+export interface CreditTransaction {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  generationJobId: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface UsageEntry {
+  provider: string;
+  imagesProduced: number;
+  creditsCharged: number;
+  externalCostCents: number;
+  createdAt: string;
+}
+
 /** Evento de progresso recebido pelo SSE. */
 export interface GenerationProgress {
   generationJobId: string;
@@ -300,6 +325,12 @@ export const api = {
 
   selectResult: (resultId: string) =>
     apiFetch<GenerationResult>(`/generation-results/${resultId}/select`, { method: 'POST' }),
+
+  wallet: () => apiFetch<Wallet>('/billing/wallet'),
+
+  transactions: () => apiFetch<CreditTransaction[]>('/billing/transactions'),
+
+  usage: () => apiFetch<UsageEntry[]>('/billing/usage'),
 };
 
 /**
@@ -351,4 +382,7 @@ export const queryKeys = {
   generations: (sceneId: string) => ['scenes', sceneId, 'generations'] as const,
   generation: (jobId: string) => ['generation-jobs', jobId] as const,
   estimate: (sceneId: string) => ['scenes', sceneId, 'estimate'] as const,
+  wallet: ['billing', 'wallet'] as const,
+  transactions: ['billing', 'transactions'] as const,
+  usage: ['billing', 'usage'] as const,
 };

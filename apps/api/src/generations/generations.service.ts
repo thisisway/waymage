@@ -5,6 +5,7 @@ import { FakeImageProvider } from '@waymage/provider-sdk';
 import { promptCompiler } from '@waymage/prompt-compiler';
 import { hasBlockingIssues, validateSceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
+import { BillingService } from '../billing/billing.service';
 import { AppError } from '../common/app-error';
 import { PrismaService } from '../infra/prisma.service';
 import { AppStorageService } from '../infra/storage.service';
@@ -75,6 +76,7 @@ export class GenerationsService {
     private readonly queue: GenerationQueueService,
     private readonly storage: AppStorageService,
     private readonly audit: AuditService,
+    private readonly billing: BillingService,
   ) {}
 
   /** Prévia do que vai acontecer, antes de gastar qualquer coisa (blueprint §22). */
@@ -188,12 +190,38 @@ export class GenerationsService {
         requestedCount: scene.sceneSpec.output.count,
         providerStrategy: scene.sceneSpec.advanced.provider,
         estimatedCredits: cost.credits,
-        // Reserva de crédito entra na Fase 6; por ora o job registra a estimativa e segue.
         reservedCredits: 0,
         idempotencyKey,
         createdById: principal.user.id,
       },
       select: { id: true },
+    });
+
+    // Reserva ANTES de enfileirar. O worker só é acionado com o crédito já preso: enfileirar
+    // primeiro abriria uma janela em que a geração roda e o pagamento falha depois.
+    try {
+      await this.billing.reserve({
+        workspaceId: principal.workspaceId,
+        amount: cost.credits,
+        generationJobId: job.id,
+      });
+    } catch (error) {
+      // Sem crédito, o job não deve existir: deixá-lo em QUEUED faria o worker pegá-lo.
+      await this.prisma.generationJob.update({
+        where: { id: job.id },
+        data: {
+          status: GenerationStatus.FAILED,
+          completedAt: new Date(),
+          errorCode: 'INSUFFICIENT_CREDITS',
+          errorMessage: 'Créditos insuficientes.',
+        },
+      });
+      throw error;
+    }
+
+    await this.prisma.generationJob.update({
+      where: { id: job.id },
+      data: { reservedCredits: cost.credits },
     });
 
     await this.queue.enqueue({
@@ -267,7 +295,7 @@ export class GenerationsService {
   ): Promise<GenerationJobView> {
     const job = await this.prisma.generationJob.findFirst({
       where: { id: jobId, workspaceId: principal.workspaceId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, reservedCredits: true },
     });
     if (!job) throw AppError.notFound('Geração');
 
@@ -287,6 +315,16 @@ export class GenerationsService {
         errorCode: 'CANCELLED_BY_USER',
       },
     });
+
+    // Cancelou antes de receber imagem: o crédito volta.
+    if (job.reservedCredits > 0) {
+      await this.billing.release({
+        workspaceId: principal.workspaceId,
+        amount: job.reservedCredits,
+        generationJobId: job.id,
+        note: 'Geração cancelada pelo usuário',
+      });
+    }
 
     await this.audit.record({
       workspaceId: principal.workspaceId,

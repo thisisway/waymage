@@ -57,6 +57,9 @@ export default function ProjectsPage() {
       <header className="flex items-center justify-between border-b border-surface-border bg-surface-raised px-6 py-3">
         <span className="text-sm font-semibold tracking-tight">Waymage</span>
         <div className="flex items-center gap-4 text-xs text-ink-secondary">
+          <a href="/billing" className="hover:text-ink-primary">
+            créditos
+          </a>
           <span>{session.data.user.email}</span>
           <button type="button" onClick={handleLogout} className="hover:text-ink-primary">
             Sair

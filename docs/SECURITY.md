@@ -124,17 +124,24 @@ fixture, nem em comentário, nem em documentação.
 
 ## 7. Dinheiro e idempotência
 
-⬜ **Fase 6.**
+✅ **Fase 6.**
 
-- Ledger **append-only**. Nunca atualizar saldo sem gravar a transação correspondente.
-- Toda operação financeira dentro de uma transação Postgres, com lock na wallet.
-- Saldo negativo impedido por constraint, não apenas por checagem na aplicação.
-- `Idempotency-Key` obrigatória em criação de job e em operação de crédito; chave repetida
-  devolve o resultado original em vez de executar de novo.
-- Reserva **antes** de submeter ao provedor; captura só após sucesso; release automático em
-  falha não imputável ao usuário.
-- ⬜ Webhooks (se houver): verificação de assinatura + janela de timestamp + registro de ID
-  processado, contra replay.
+- Ledger **append-only**. Nenhum saldo muda sem a transação correspondente, na mesma transação
+  de banco ([D-038](DECISIONS.md#d-038)).
+- Saldo negativo impedido por `CHECK` no Postgres, não apenas por checagem na aplicação
+  ([D-036](DECISIONS.md#d-036)) — protege inclusive contra script de manutenção e correção
+  manual. Coberto por teste.
+- Reserva por **compare-and-swap**: a condição de saldo faz parte da escrita, então reservas
+  simultâneas não podem ambas passar ([D-037](DECISIONS.md#d-037)).
+- Chave idempotente derivada do job em toda operação (`reserve:`, `capture:`, `release:`),
+  garantida por índice único — não por checagem prévia, que tem janela de corrida.
+- Reserva **antes** de enfileirar; captura só após entrega; devolução automática em falha não
+  imputável ao usuário ([D-039](DECISIONS.md#d-039)).
+- `GET /billing/reconcile` expõe a conferência: soma do extrato contra o saldo.
+- Créditos são inteiros — ponto flutuante em dinheiro acumula erro inexplicável.
+
+⬜ Pendente: compra de créditos e, se houver webhook de pagamento, verificação de assinatura
+com janela de timestamp e registro de ID processado contra replay.
 
 ---
 
