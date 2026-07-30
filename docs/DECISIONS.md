@@ -260,6 +260,38 @@ biblioteca de imagem.
 
 ---
 
+## D-019 — EasyPanel como plataforma de deploy
+
+**Status:** aceita (a implementar) · **Repositório:** `github.com/thisisway/waymage`
+
+EasyPanel roda num VPS próprio e entrega, numa interface só, o que este projeto precisa:
+três serviços a partir do mesmo repositório (web, api, worker), auto-deploy por push, e
+templates de Postgres, Redis e MinIO — as três dependências da Fase 1, sem contratar três
+provedores gerenciados.
+
+A alternativa (Vercel + Neon + Upstash + R2) seria mais elástica e mais cara, e ainda assim
+não resolve bem o worker, que é um processo longo sem HTTP.
+
+**Decisões que acompanham a escolha:**
+
+1. **Dockerfile por app, não Nixpacks.** O Nixpacks infere o build; com pnpm workspaces,
+   `prisma generate` e Turborepo ele infere errado. Um Dockerfile por app é previsível e
+   funciona igual na máquina do dev e no servidor.
+2. **Migrations no start da API, com trava.** O EasyPanel não tem release phase. O
+   `prisma migrate deploy` roda no entrypoint da API antes do `listen`, e só da API — se o
+   worker também rodasse, dois containers subindo juntos aplicariam migration em paralelo.
+3. **Backup do Postgres desde o primeiro deploy.** Banco e aplicação no mesmo host: perder o
+   host é perder tudo. Dump periódico para storage externo, não para o próprio VPS.
+4. **MinIO agora, S3/R2 quando o volume justificar.** Imagem de usuário perdida é
+   irrecuperável, e o disco do VPS não tem replicação. A troca é uma variável de ambiente,
+   não código — é o retorno da [D-007](#d-007).
+
+**Limites aceitos:** host único (sem alta disponibilidade), banco e worker disputando CPU com
+a aplicação, escala do worker por réplica manual. Adequado ao MVP; revisitar quando houver
+carga real medida.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
