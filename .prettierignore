@@ -1,0 +1,10 @@
+dist
+.next
+node_modules
+pnpm-lock.yaml
+.turbo
+packages/database/prisma/migrations
+packages/database/generated
+
+# Documento-fonte do usuário: não reformatar.
+arquitetura_sistema_geracao_imagens_claude_code.md

@@ -1,0 +1,31 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
+packages/database/generated/
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Cache
+.turbo/
+.eslintcache
+coverage/
+
+# Segredos — NUNCA versionar. Só .env.example entra no repositório.
+.env
+.env.*
+!.env.example
+
+# Runtime local
+storage-local/
+*.log
+
+# Editor / SO
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

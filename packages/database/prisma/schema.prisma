@@ -1,0 +1,643 @@
+// Waymage — modelo de domínio.
+//
+// Regras (blueprint §14.1, docs/ARCHITECTURE.md §5):
+//   · UUID como PK, timestamps UTC
+//   · workspaceId em toda entidade multi-tenant — é a fronteira de isolamento
+//   · soft delete (deletedAt) em Project, Scene e Asset
+//   · JSONB para SceneSpec e parâmetros de provedor
+//   · nenhum segredo de provedor gravado aqui
+//   · idempotencyKey em jobs e operações de crédito
+
+generator client {
+  provider = "prisma-client-js"
+  // Saída explícita: o client gerado é o próprio conteúdo de @waymage/database, o que
+  // dispensa passo de build no pacote e evita o auto-install do Prisma sob pnpm workspace.
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+/// Um único modelo Asset cobre referências, máscaras, resultados e exports.
+/// Ver docs/DECISIONS.md D-014.
+enum AssetKind {
+  REFERENCE
+  MASK
+  GENERATED
+  THUMBNAIL
+  EXPORT
+}
+
+enum AssetStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  FAILED
+  QUARANTINED
+}
+
+/// Espelha `referenceRoleSchema` de @waymage/scene-spec.
+enum ReferenceRole {
+  IDENTITY
+  FACE
+  BODY
+  WARDROBE
+  PRODUCT
+  SCENE
+  STYLE
+  POSE
+  PALETTE
+  LOGO
+}
+
+/// Máquina de estados do job (blueprint §12.1). Transições validadas em código.
+enum GenerationStatus {
+  DRAFT
+  QUEUED
+  VALIDATING
+  MODERATING_INPUT
+  COMPILING
+  ROUTING
+  SUBMITTING
+  PROCESSING
+  DOWNLOADING
+  MODERATING_OUTPUT
+  EVALUATING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum OperationType {
+  TEXT_TO_IMAGE
+  IMAGE_TO_IMAGE
+  VARIATION
+  REFINE
+  MASKED_EDIT
+}
+
+enum ProviderRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+  CANCELLED
+}
+
+enum ModerationTarget {
+  PROMPT_TEXT
+  REFERENCE_IMAGE
+  MASK
+  COMPILED_PROMPT
+  OUTPUT_IMAGE
+  EXPORT
+}
+
+enum ModerationVerdict {
+  ALLOW
+  ALLOW_WITH_WARNING
+  REVIEW_REQUIRED
+  BLOCK
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  BONUS
+  RESERVATION
+  CAPTURE
+  RELEASE
+  REFUND
+  ADMIN_ADJUSTMENT
+}
+
+enum ExportStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+}
+
+// ─── Identidade e tenancy ────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  name         String
+  /// argon2id. Nunca logar, nunca serializar em resposta.
+  passwordHash String
+  emailVerified Boolean @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  memberships     WorkspaceMember[]
+  sceneVersions   SceneVersion[]
+  generationJobs  GenerationJob[]
+  auditLogs       AuditLog[]
+  uploadedAssets  Asset[]
+  consentRecords  ConsentRecord[]
+  exportJobs      ExportJob[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique
+  planCode  String    @default("free")
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  members        WorkspaceMember[]
+  projects       Project[]
+  assets         Asset[]
+  generationJobs GenerationJob[]
+  brandKits      BrandKit[]
+  wallet         CreditWallet?
+  usageLedger    UsageLedger[]
+  auditLogs      AuditLog[]
+  consentRecords ConsentRecord[]
+  exportJobs     ExportJob[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  userId      String        @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+// ─── Projetos e cenas ────────────────────────────────────────────────────────
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  name        String
+  description String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scenes         Scene[]
+  assets         Asset[]
+  generationJobs GenerationJob[]
+
+  @@index([workspaceId, deletedAt])
+  @@map("projects")
+}
+
+model Scene {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @db.Uuid
+  projectId        String    @db.Uuid
+  name             String
+  /// Versão exibida no editor. As versões em si são imutáveis.
+  currentVersionId String?   @unique @db.Uuid
+  /// Contador otimista do autosave (blueprint §24).
+  revision         Int       @default(0)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime? @db.Timestamptz(6)
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions       SceneVersion[] @relation("SceneVersions")
+  currentVersion SceneVersion?  @relation("SceneCurrentVersion", fields: [currentVersionId], references: [id])
+  generationJobs GenerationJob[]
+
+  @@index([workspaceId, projectId, deletedAt])
+  @@map("scenes")
+}
+
+/// Imutável por contrato: nunca sofre UPDATE do SceneSpec. Toda alteração cria uma nova.
+model SceneVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  sceneId         String   @db.Uuid
+  versionNumber   Int
+  /// SceneSpec serializado. Validado por @waymage/scene-spec antes de gravar.
+  sceneSpec       Json
+  /// Versão do schema do SceneSpec com que foi gravado (ex.: "1.0").
+  specVersion     String
+  parentVersionId String?  @db.Uuid
+  changeSummary   String?
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  scene          Scene              @relation("SceneVersions", fields: [sceneId], references: [id], onDelete: Cascade)
+  currentOfScene Scene?             @relation("SceneCurrentVersion")
+  parentVersion  SceneVersion?      @relation("VersionLineage", fields: [parentVersionId], references: [id])
+  children       SceneVersion[]     @relation("VersionLineage")
+  createdBy      User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  references     ReferenceBinding[]
+  generationJobs GenerationJob[]
+
+  @@unique([sceneId, versionNumber])
+  @@index([workspaceId, sceneId, createdAt])
+  @@map("scene_versions")
+}
+
+// ─── Assets ──────────────────────────────────────────────────────────────────
+
+/// Todo objeto armazenado — referência, máscara, resultado, miniatura ou export.
+/// Bucket privado: `storageKey` nunca é servido diretamente, só por URL assinada.
+model Asset {
+  id           String      @id @default(uuid()) @db.Uuid
+  workspaceId  String      @db.Uuid
+  projectId    String?     @db.Uuid
+  kind         AssetKind
+  status       AssetStatus @default(PENDING_UPLOAD)
+  storageKey   String      @unique
+  mimeType     String
+  sizeBytes    Int?
+  width        Int?
+  height       Int?
+  /// SHA-256 do conteúdo, para deduplicação e auditoria de integridade.
+  checksum     String?
+  originalName String?
+  /// Análise automática da referência (cores dominantes, faces detectadas, etc.).
+  analysis     Json?
+  uploadedById String?     @db.Uuid
+  createdAt    DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @db.Timestamptz(6)
+  deletedAt    DateTime?   @db.Timestamptz(6)
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  bindings          ReferenceBinding[]
+  resultsAsImage    GenerationResult[] @relation("ResultImage")
+  resultsAsThumb    GenerationResult[] @relation("ResultThumbnail")
+  masks             MaskAsset[]
+  editOperations    EditOperation[]
+  moderationDecisions ModerationDecision[]
+  consentRecords    ConsentRecord[]
+  exportJobs        ExportJob[]
+
+  @@index([workspaceId, kind, status])
+  @@index([projectId, deletedAt])
+  @@map("assets")
+}
+
+/// Vínculo entre uma referência e uma versão de cena, com função e peso.
+model ReferenceBinding {
+  id             String        @id @default(uuid()) @db.Uuid
+  workspaceId    String        @db.Uuid
+  sceneVersionId String        @db.Uuid
+  assetId        String        @db.Uuid
+  role           ReferenceRole
+  /// 0..1. Espelha `references[].weight` do SceneSpec.
+  weight         Float         @default(0.5)
+  /// Aspectos a preservar (`preserve[]` do SceneSpec).
+  preserve       String[]      @default([])
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+
+  sceneVersion SceneVersion @relation(fields: [sceneVersionId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneVersionId, assetId, role])
+  @@index([workspaceId])
+  @@map("reference_bindings")
+}
+
+/// Máscara de edição localizada. O PNG mora em `asset`; aqui ficam os parâmetros.
+model MaskAsset {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  assetId     String   @db.Uuid
+  /// Suavização da borda, em pixels.
+  featherPx   Int      @default(0)
+  inverted    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  asset          Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  editOperations EditOperation[]
+
+  @@index([workspaceId])
+  @@map("mask_assets")
+}
+
+// ─── Geração ─────────────────────────────────────────────────────────────────
+
+model GenerationJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  workspaceId    String           @db.Uuid
+  projectId      String           @db.Uuid
+  sceneId        String           @db.Uuid
+  sceneVersionId String           @db.Uuid
+  status         GenerationStatus @default(DRAFT)
+  operationType  OperationType    @default(TEXT_TO_IMAGE)
+  requestedCount Int              @default(4)
+  /// "auto" delega ao ModelRouter; qualquer outro valor força um provedor.
+  providerStrategy String         @default("auto")
+  selectedProvider String?
+  estimatedCredits Int            @default(0)
+  reservedCredits  Int            @default(0)
+  actualCredits    Int?
+  /// Escopada ao workspace: a mesma chave nunca executa duas vezes.
+  idempotencyKey String
+  errorCode      String?
+  errorMessage   String?
+  createdById    String?          @db.Uuid
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  startedAt      DateTime?        @db.Timestamptz(6)
+  completedAt    DateTime?        @db.Timestamptz(6)
+
+  workspace    Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scene        Scene                @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  sceneVersion SceneVersion         @relation(fields: [sceneVersionId], references: [id])
+  createdBy    User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  results      GenerationResult[]
+  providerRuns ProviderRun[]
+  compilations PromptCompilation[]
+  usage        UsageLedger[]
+  transactions CreditTransaction[]
+  moderation   ModerationDecision[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status, createdAt])
+  @@index([sceneId, createdAt])
+  @@map("generation_jobs")
+}
+
+model GenerationResult {
+  id                String            @id @default(uuid()) @db.Uuid
+  workspaceId       String            @db.Uuid
+  generationJobId   String            @db.Uuid
+  providerRunId     String?           @db.Uuid
+  assetId           String            @db.Uuid
+  thumbnailAssetId  String?           @db.Uuid
+  width             Int
+  height            Int
+  format            String
+  seed              BigInt?
+  safetyStatus      ModerationVerdict @default(ALLOW)
+  /// Avaliação automática de aderência (blueprint §18).
+  evaluation        Json?
+  selected          Boolean           @default(false)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+
+  job            GenerationJob   @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  providerRun    ProviderRun?    @relation(fields: [providerRunId], references: [id], onDelete: SetNull)
+  asset          Asset           @relation("ResultImage", fields: [assetId], references: [id], onDelete: Cascade)
+  thumbnailAsset Asset?          @relation("ResultThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+  editOperations EditOperation[]
+
+  @@index([workspaceId, generationJobId])
+  @@index([generationJobId, selected])
+  @@map("generation_results")
+}
+
+/// Uma execução contra um provedor. Guarda request e response para auditoria e replay.
+model ProviderRun {
+  id              String            @id @default(uuid()) @db.Uuid
+  workspaceId     String            @db.Uuid
+  generationJobId String            @db.Uuid
+  provider        String
+  providerModel   String?
+  providerJobId   String?
+  /// Payload enviado, já sem credenciais.
+  request         Json
+  response        Json?
+  /// Custo cobrado pelo provedor, em centavos de USD.
+  costExternal    Int?
+  latencyMs       Int?
+  status          ProviderRunStatus @default(PENDING)
+  errorCode       String?
+  attempt         Int               @default(1)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+
+  job     GenerationJob      @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  results GenerationResult[]
+
+  @@index([workspaceId, provider, createdAt])
+  @@index([generationJobId])
+  @@map("provider_runs")
+}
+
+/// Nunca guardar só o prompt: aqui ficam SceneSpec normalizado, prompt e versão do compilador.
+model PromptCompilation {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  generationJobId String   @db.Uuid
+  provider        String
+  mode            String
+  prompt          String
+  negativePrompt  String?
+  referenceInstructions Json @default("[]")
+  warnings        Json     @default("[]")
+  normalizedSpec  Json
+  compilerVersion String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  job GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, generationJobId])
+  @@map("prompt_compilations")
+}
+
+model EditOperation {
+  id             String   @id @default(uuid()) @db.Uuid
+  workspaceId    String   @db.Uuid
+  sourceResultId String   @db.Uuid
+  maskId         String?  @db.Uuid
+  resultAssetId  String?  @db.Uuid
+  instruction    String
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  sourceResult GenerationResult @relation(fields: [sourceResultId], references: [id], onDelete: Cascade)
+  mask         MaskAsset?       @relation(fields: [maskId], references: [id], onDelete: SetNull)
+  resultAsset  Asset?           @relation(fields: [resultAssetId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, sourceResultId])
+  @@map("edit_operations")
+}
+
+// ─── Brand kit ───────────────────────────────────────────────────────────────
+
+model BrandKit {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String
+  /// Paleta, fontes, tom visual, termos proibidos, regras de composição (blueprint §21).
+  definition  Json     @default("{}")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@map("brand_kits")
+}
+
+// ─── Créditos ────────────────────────────────────────────────────────────────
+
+/// Saldo em créditos inteiros — nunca ponto flutuante para dinheiro.
+/// `balance` é cache do ledger; `reserved` é o que está preso em jobs em voo.
+model CreditWallet {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @unique @db.Uuid
+  balance     Int      @default(0)
+  reserved    Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("credit_wallets")
+}
+
+/// Append-only. Nunca sofre UPDATE nem DELETE — a soma reconstrói o saldo.
+model CreditTransaction {
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @db.Uuid
+  walletId        String                @db.Uuid
+  type            CreditTransactionType
+  /// Assinado: positivo credita, negativo debita.
+  amount          Int
+  /// Saldo resultante, para conferência sem varrer a tabela inteira.
+  balanceAfter    Int
+  generationJobId String?               @db.Uuid
+  /// Impede que um retry debite duas vezes.
+  idempotencyKey  String
+  note            String?
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+
+  wallet CreditWallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  job    GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([walletId, createdAt])
+  @@map("credit_transactions")
+}
+
+/// Custo interno vs. custo real do provedor, por job. Base das métricas de margem.
+model UsageLedger {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  generationJobId String   @db.Uuid
+  provider        String
+  imagesProduced  Int      @default(0)
+  creditsCharged  Int      @default(0)
+  /// Centavos de USD.
+  externalCostCents Int    @default(0)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  job       GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@map("usage_ledger")
+}
+
+// ─── Moderação e consentimento ───────────────────────────────────────────────
+
+model ModerationDecision {
+  id              String            @id @default(uuid()) @db.Uuid
+  workspaceId     String            @db.Uuid
+  target          ModerationTarget
+  verdict         ModerationVerdict
+  generationJobId String?           @db.Uuid
+  assetId         String?           @db.Uuid
+  /// Categorias e scores do moderador. Nunca guardar o conteúdo em si.
+  detail          Json              @default("{}")
+  moderator       String
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+
+  job   GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  asset Asset?         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, verdict, createdAt])
+  @@map("moderation_decisions")
+}
+
+/// Autorização de uso de imagem de pessoa real. Revogável (blueprint §17.2).
+model ConsentRecord {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  assetId     String    @db.Uuid
+  /// Quem declarou possuir a autorização.
+  declaredById String   @db.Uuid
+  subjectLabel String?
+  grantedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  declaredBy User      @relation(fields: [declaredById], references: [id])
+
+  @@index([workspaceId, assetId])
+  @@map("consent_records")
+}
+
+// ─── Exportação ──────────────────────────────────────────────────────────────
+
+model ExportJob {
+  id            String       @id @default(uuid()) @db.Uuid
+  workspaceId   String       @db.Uuid
+  requestedById String       @db.Uuid
+  status        ExportStatus @default(QUEUED)
+  format        String
+  /// IDs dos GenerationResult incluídos.
+  resultIds     String[]     @default([])
+  assetId       String?      @db.Uuid
+  expiresAt     DateTime?    @db.Timestamptz(6)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requestedBy User      @relation(fields: [requestedById], references: [id])
+  asset       Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@map("export_jobs")
+}
+
+// ─── Auditoria ───────────────────────────────────────────────────────────────
+
+/// Append-only. Toda escrita relevante e toda ação administrativa passa por aqui.
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String?  @db.Uuid
+  actorUserId  String?  @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String?
+  /// Metadados não sensíveis. Nunca senha, token, cookie ou URL assinada.
+  metadata     Json     @default("{}")
+  ipAddress    String?
+  requestId    String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}

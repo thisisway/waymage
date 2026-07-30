@@ -1,0 +1,14 @@
+# Normaliza fim de linha para LF no repositório.
+# Sem isto, um arquivo commitado do Windows com CRLF quebra scripts dentro de container
+# Linux (`#!/bin/sh` com \r vira "bad interpreter") — falha que só aparece no deploy.
+* text=auto eol=lf
+
+# Binários: nunca converter.
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+
+# Lockfile: gerado, não revisar linha a linha em diff.
+pnpm-lock.yaml -diff linguist-generated

@@ -1,0 +1,16 @@
+{
+  "name": "@waymage/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma schema, migrations e client gerado. O client É o conteúdo do pacote — não há build próprio; rode `pnpm db:generate` na raiz.",
+  "main": "./generated/client/index.js",
+  "types": "./generated/client/index.d.ts",
+  "scripts": {
+    "lint": "echo 'sem código-fonte próprio (client gerado)'",
+    "typecheck": "echo 'sem código-fonte próprio (client gerado)'",
+    "test": "echo 'sem testes próprios; o schema é validado por prisma validate'"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  }
+}

@@ -1,0 +1,17 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Scripts de instalação permitidos (pnpm bloqueia por padrão — princípio de menor privilégio).
+# Todos aqui precisam de postinstall legítimo: binário nativo ou geração de client.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true
+
+# O `prisma generate` instala @prisma/client na raiz do workspace; sem isto o pnpm
+# bloqueia essa adição e a geração do client falha.
+ignoreWorkspaceRootCheck: true

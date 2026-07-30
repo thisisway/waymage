@@ -1,0 +1,69 @@
+# Ambiente de desenvolvimento local.
+#
+# As credenciais aqui são de brinquedo e servem apenas para localhost — nunca reutilizar em
+# ambiente exposto (docs/SECURITY.md §2). Nenhum serviço aqui escuta fora de 127.0.0.1.
+#
+# As portas do host são deslocadas das padrão (5442, 6389, 9010/9011) para conviver com
+# outros projetos que já usem 5432, 6379 e 9000 na mesma máquina.
+
+name: waymage
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: waymage
+      POSTGRES_PASSWORD: waymage
+      POSTGRES_DB: waymage
+    ports:
+      - '127.0.0.1:5442:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U waymage -d waymage']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # appendonly: um job perdido por restart do Redis é crédito reservado e nunca liberado.
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:6389:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    # Em modo single-drive o MinIO expõe cada diretório de /data como bucket, então criar a
+    # pasta já cria o bucket — sem container de setup e sem depender de DNS entre containers.
+    # O bucket permanece PRIVADO: nenhuma policy anônima é aplicada em lugar nenhum.
+    entrypoint: ['sh', '-c']
+    command: ['mkdir -p /data/waymage-dev && exec minio server /data --console-address :9001']
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '127.0.0.1:9010:9000' # API S3
+      - '127.0.0.1:9011:9001' # Console web
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
