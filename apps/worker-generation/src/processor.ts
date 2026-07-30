@@ -70,6 +70,7 @@ export async function processGenerationJob(
       operationType: true,
       reservedCredits: true,
       sceneVersion: { select: { id: true, sceneSpec: true } },
+      sourceResult: { select: { seed: true, asset: { select: { storageKey: true } } } },
     },
   });
 
@@ -104,7 +105,27 @@ export async function processGenerationJob(
     }
 
     await advance('MODERATING_INPUT', 'COMPILING');
-    const mode = spec.output.quality === 'final' ? 'final' : 'draft';
+
+    /**
+     * Variação e refinamento partem da mesma cena, mas pedem coisas opostas ao provedor.
+     *
+     * Variação quer outra saída: seed nova, mesma qualidade. Refinamento quer a MESMA saída
+     * com mais detalhe, então preserva a seed do resultado de origem e sobe a qualidade —
+     * trocar a seed aqui produziria uma imagem diferente, que não é o que foi pedido.
+     */
+    const mode =
+      record.operationType === 'REFINE'
+        ? 'final'
+        : spec.output.quality === 'final'
+          ? 'final'
+          : 'draft';
+
+    const seed =
+      record.operationType === 'VARIATION'
+        ? Math.floor(Math.random() * 2_147_483_647)
+        : record.operationType === 'REFINE'
+          ? Number(record.sourceResult?.seed ?? spec.advanced.seed ?? 0) || undefined
+          : (spec.advanced.seed ?? undefined);
     const compilation = await promptCompiler.compile({
       sceneSpec: spec,
       providerCapabilities: capabilities,
@@ -137,6 +158,17 @@ export async function processGenerationJob(
 
     const references = await resolveReferences(spec, payload.workspaceId, prisma, storage);
 
+    // Refinamento anexa a imagem de origem: o provedor precisa vê-la para manter a
+    // composição enquanto acrescenta detalhe.
+    if (record.operationType === 'REFINE' && record.sourceResult?.asset) {
+      references.push({
+        role: 'scene',
+        weight: 0.9,
+        preserve: ['composition'],
+        url: await storage.signedReadUrl(record.sourceResult.asset.storageKey, SIGNED_URL_TTL.read),
+      });
+    }
+
     const request = {
       requestId: payload.requestId,
       prompt: compilation.prompt,
@@ -146,7 +178,7 @@ export async function processGenerationJob(
       format: spec.output.format,
       count: record.requestedCount,
       mode,
-      ...(spec.advanced.seed === null ? {} : { seed: spec.advanced.seed }),
+      ...(seed === undefined ? {} : { seed }),
       transparentBackground: spec.output.transparentBackground,
       sceneSpec: spec,
     } as const;

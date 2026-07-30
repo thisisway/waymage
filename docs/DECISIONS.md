@@ -692,6 +692,62 @@ credita duas vezes.
 
 ---
 
+## D-041 — Variacao reusa a versao da cena; refinamento reusa a seed
+
+**Status:** aceita (Fase 7)
+
+Variar e refinar partem do mesmo resultado mas pedem coisas opostas ao provedor.
+
+**Variacao** quer outra saida da MESMA especificacao: reusa a `SceneVersion` do job de origem
+e sorteia uma seed nova. Tirar snapshot novo aqui misturaria edicoes feitas na cena depois da
+geracao — e a comparacao entre as duas imagens deixaria de significar alguma coisa.
+
+**Refinamento** quer a MESMA saida com mais detalhe: preserva a seed do resultado de origem,
+sobe a qualidade para `final` e reduz a contagem para **uma** imagem. Trocar a seed produziria
+uma imagem diferente, que nao e o que foi pedido; e renderizar quatro vezes em qualidade final
+gastaria credito para explorar algo que o usuario ja escolheu.
+
+O refinamento tambem anexa a imagem de origem como referencia de composicao, para o provedor
+ver o que precisa manter.
+
+`GenerationJob.sourceResultId` registra a linhagem, o que permite reconstruir
+"rascunho A → variacao A2 → refino final" na linha do tempo.
+
+---
+
+## D-042 — Exportacao converte formato no worker, um arquivo por resultado
+
+**Status:** aceita (Fase 7)
+
+Exportar e assincrono porque a conversao usa `sharp`, que so existe no worker — a API nunca
+decodifica imagem, e manter a superficie de ataque de um decodificador fora do processo HTTP
+e a razao da [D-030](#d-030). Aqui essa decisao paga de novo, sem custo extra.
+
+**Sem ZIP.** Empacotar exigiria uma dependencia de arquivamento para um caso que ainda nao
+sabemos se acontece: quem exporta a grade inteira baixa quatro arquivos. Trocar por ZIP e
+acrescentar um passo no processador quando o uso justificar.
+
+A URL de download e assinada com `Content-Disposition: attachment` **dentro da assinatura**:
+o nome do arquivo nao pode ser alterado por quem tiver o link, e `attachment` impede que um
+conteudo inesperado seja renderizado pelo browser a partir do dominio do storage.
+
+Export expira em 7 dias — e derivado e reconstruivel, entao guarda-lo para sempre so ocupa
+espaco.
+
+---
+
+## D-043 — Comparacao e estado de tela, nao do servidor
+
+**Status:** aceita (Fase 7)
+
+Quais duas imagens estao lado a lado agora nao e informacao que outra aba, outro usuario ou
+o proximo login precisem conhecer. Vive em `useState` na pagina do editor.
+
+Limite de dois: com tres, deixa de ser comparacao lado a lado e vira uma grade menor — que ja
+existe logo acima.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

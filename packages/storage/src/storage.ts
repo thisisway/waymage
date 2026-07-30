@@ -97,6 +97,30 @@ export class StorageService {
   }
 
   /**
+   * URL de leitura que baixa em vez de abrir no navegador.
+   *
+   * `ResponseContentDisposition` é assinado junto da URL, então o nome do arquivo não pode
+   * ser alterado por quem tiver o link — e `attachment` impede que um conteúdo inesperado
+   * seja renderizado pelo browser a partir do domínio do storage.
+   */
+  async signedDownloadUrl(
+    key: string,
+    filename: string,
+    expiresIn: number = SIGNED_URL_TTL.read,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        // Aspas escapadas: nome com vírgula ou espaço quebraria o header sem elas.
+        ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, '')}"`,
+      }),
+      { expiresIn },
+    );
+  }
+
+  /**
    * URL de upload direto. O `contentType` é assinado junto: o cliente não pode subir um
    * tipo diferente do declarado — a validação real por magic bytes ainda acontece no
    * `POST /assets/complete`.

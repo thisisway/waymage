@@ -3,12 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { validateSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   GenerationProgressBar,
   GenerationSummary,
   ResultsGrid,
 } from '../../../components/generation-panel';
+import { ResultCompare } from '../../../components/result-compare';
 import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
 import { CreditBadge } from '../../../components/credit-badge';
@@ -79,6 +80,17 @@ export default function SceneEditorPage() {
 
   const generation = useGeneration(sceneId);
 
+  // Comparação é estado efêmero da tela: quais dois resultados estão marcados agora.
+  const [comparing, setComparing] = useState<string[]>([]);
+  const toggleCompare = useCallback((resultId: string) => {
+    setComparing((current) =>
+      current.includes(resultId)
+        ? current.filter((id) => id !== resultId)
+        : // Dois de cada vez: com três, não é mais comparação lado a lado.
+          [...current, resultId].slice(-2),
+    );
+  }, []);
+
   const selectResult = useMutation({
     mutationFn: (resultId: string) => api.selectResult(resultId),
     onSuccess: () =>
@@ -132,6 +144,9 @@ export default function SceneEditorPage() {
           scene={scene}
           generation={generation}
           onSelectResult={(resultId) => selectResult.mutate(resultId)}
+          comparing={comparing}
+          onToggleCompare={toggleCompare}
+          onClearCompare={() => setComparing([])}
         />
         <InspectorPanel
           scene={scene}
@@ -280,18 +295,33 @@ function Canvas({
   scene,
   generation,
   onSelectResult,
+  comparing,
+  onToggleCompare,
+  onClearCompare,
 }: {
   scene: Scene;
   generation: ReturnType<typeof useGeneration>;
   onSelectResult: (resultId: string) => void;
+  comparing: string[];
+  onToggleCompare: (resultId: string) => void;
+  onClearCompare: () => void;
 }) {
+  const results = generation.job?.results ?? [];
+
   return (
     <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-8">
-      <ResultsGrid
-        job={generation.job}
-        placeholders={scene.sceneSpec.output.count}
-        onSelect={onSelectResult}
-      />
+      {comparing.length === 2 ? (
+        <ResultCompare results={results} selectedIds={comparing} onClose={onClearCompare} />
+      ) : (
+        <ResultsGrid
+          job={generation.job}
+          placeholders={scene.sceneSpec.output.count}
+          onSelect={onSelectResult}
+          onDerive={generation.follow}
+          comparing={comparing}
+          onToggleCompare={onToggleCompare}
+        />
+      )}
 
       <GenerationProgressBar state={generation} />
 

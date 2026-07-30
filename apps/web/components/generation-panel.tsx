@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, queryKeys, type GenerationJob, type GenerationResult } from '../lib/api';
 import type { useGeneration } from '../lib/use-generation';
+import { ResultActions } from './result-actions';
 
 /** Resumo, custo e alertas antes de gerar (blueprint §22). */
 export function GenerationSummary({ sceneId }: { sceneId: string }) {
@@ -108,10 +109,16 @@ export function ResultsGrid({
   job,
   placeholders,
   onSelect,
+  onDerive,
+  comparing,
+  onToggleCompare,
 }: {
   job: GenerationJob | null;
   placeholders: number;
   onSelect: (resultId: string) => void;
+  onDerive: (jobId: string) => void;
+  comparing: string[];
+  onToggleCompare: (resultId: string) => void;
 }) {
   const results = job?.results ?? [];
 
@@ -138,6 +145,9 @@ export function ResultsGrid({
           result={result}
           index={index}
           onSelect={() => onSelect(result.id)}
+          onDerive={onDerive}
+          comparing={comparing.includes(result.id)}
+          onToggleCompare={() => onToggleCompare(result.id)}
         />
       ))}
     </div>
@@ -148,10 +158,16 @@ function ResultCard({
   result,
   index,
   onSelect,
+  onDerive,
+  comparing,
+  onToggleCompare,
 }: {
   result: GenerationResult;
   index: number;
   onSelect: () => void;
+  onDerive: (jobId: string) => void;
+  comparing: boolean;
+  onToggleCompare: () => void;
 }) {
   return (
     <figure className="space-y-1.5">
@@ -195,6 +211,18 @@ function ResultCard({
           </span>
         )}
       </figcaption>
+
+      <label className="flex items-center gap-1.5 text-xs text-ink-muted">
+        <input
+          type="checkbox"
+          checked={comparing}
+          onChange={onToggleCompare}
+          className="h-3 w-3 accent-accent"
+        />
+        comparar
+      </label>
+
+      <ResultActions resultId={result.id} onDerive={onDerive} />
     </figure>
   );
 }

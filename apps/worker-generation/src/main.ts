@@ -1,10 +1,11 @@
 import { PrismaClient } from '@waymage/database';
-import { QUEUE_ASSETS, QUEUE_GENERATION } from '@waymage/domain';
+import { QUEUE_ASSETS, QUEUE_EXPORTS, QUEUE_GENERATION } from '@waymage/domain';
 import { StorageService } from '@waymage/storage';
 import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import pino from 'pino';
 import { processAssetJob } from './asset-processor';
+import { processExportJob } from './export-processor';
 import { env } from './config/env';
 import { EventPublisher } from './events';
 import { processGenerationJob } from './processor';
@@ -45,9 +46,17 @@ const assetWorker = new Worker(
   { connection, concurrency: env.ASSET_CONCURRENCY },
 );
 
+// Exportação tem o mesmo perfil de CPU dos assets e divide a mesma concorrência.
+const exportWorker = new Worker(
+  QUEUE_EXPORTS,
+  (job) => processExportJob(job, { prisma, storage, logger }),
+  { connection, concurrency: env.ASSET_CONCURRENCY },
+);
+
 for (const [name, worker] of [
   ['generation', generationWorker],
   ['assets', assetWorker],
+  ['exports', exportWorker],
 ] as const) {
   worker.on('failed', (job, error) => {
     logger.error(
@@ -60,7 +69,7 @@ for (const [name, worker] of [
 generationWorker.on('ready', () => {
   logger.info(
     {
-      queues: [QUEUE_GENERATION, QUEUE_ASSETS],
+      queues: [QUEUE_GENERATION, QUEUE_ASSETS, QUEUE_EXPORTS],
       concurrency: { generation: env.WORKER_CONCURRENCY, assets: env.ASSET_CONCURRENCY },
       providers: providerRegistry.ids(),
     },
@@ -75,7 +84,7 @@ generationWorker.on('ready', () => {
  */
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Encerrando worker');
-  await Promise.all([generationWorker.close(), assetWorker.close()]);
+  await Promise.all([generationWorker.close(), assetWorker.close(), exportWorker.close()]);
   storage.destroy();
   await Promise.all([connection.quit(), publisher.quit(), prisma.$disconnect()]);
   process.exit(0);

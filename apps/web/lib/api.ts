@@ -191,10 +191,29 @@ export interface GenerationResult {
   thumbnailUrl: string | null;
 }
 
+export interface ExportFile {
+  assetId: string;
+  downloadUrl: string;
+  filename: string;
+}
+
+export interface ExportJob {
+  id: string;
+  status: 'QUEUED' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
+  format: string;
+  resultIds: string[];
+  errorMessage: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  files: ExportFile[];
+}
+
 export interface GenerationJob {
   id: string;
   sceneId: string;
   sceneVersionId: string;
+  operationType: 'TEXT_TO_IMAGE' | 'IMAGE_TO_IMAGE' | 'VARIATION' | 'REFINE' | 'MASKED_EDIT';
+  sourceResultId: string | null;
   status: string;
   statusLabel: string;
   progress: number;
@@ -326,6 +345,25 @@ export const api = {
   selectResult: (resultId: string) =>
     apiFetch<GenerationResult>(`/generation-results/${resultId}/select`, { method: 'POST' }),
 
+  /** Mesma cena, seed nova — explora outra saída da mesma especificação. */
+  variation: (resultId: string, idempotencyKey: string) =>
+    apiFetch<GenerationJob>(`/generation-results/${resultId}/variation`, {
+      method: 'POST',
+      headers: { 'idempotency-key': idempotencyKey },
+    }),
+
+  /** Mesma saída em qualidade final, uma imagem só. */
+  refine: (resultId: string, idempotencyKey: string) =>
+    apiFetch<GenerationJob>(`/generation-results/${resultId}/refine`, {
+      method: 'POST',
+      headers: { 'idempotency-key': idempotencyKey },
+    }),
+
+  createExport: (resultIds: string[], format: 'png' | 'jpeg' | 'webp') =>
+    apiFetch<ExportJob>('/exports', { method: 'POST', body: { resultIds, format } }),
+
+  getExport: (exportId: string) => apiFetch<ExportJob>(`/exports/${exportId}`),
+
   wallet: () => apiFetch<Wallet>('/billing/wallet'),
 
   transactions: () => apiFetch<CreditTransaction[]>('/billing/transactions'),
@@ -382,6 +420,7 @@ export const queryKeys = {
   generations: (sceneId: string) => ['scenes', sceneId, 'generations'] as const,
   generation: (jobId: string) => ['generation-jobs', jobId] as const,
   estimate: (sceneId: string) => ['scenes', sceneId, 'estimate'] as const,
+  export: (exportId: string) => ['exports', exportId] as const,
   wallet: ['billing', 'wallet'] as const,
   transactions: ['billing', 'transactions'] as const,
   usage: ['billing', 'usage'] as const,

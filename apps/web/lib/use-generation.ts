@@ -88,6 +88,14 @@ export function useGeneration(sceneId: string) {
 
   return {
     start: () => start.mutate(),
+    /**
+     * Acompanha um job criado em outro lugar — variação e refinamento nascem do card do
+     * resultado, não do botão Gerar, mas o progresso é o mesmo e reusa este stream.
+     */
+    follow: (id: string) => {
+      setJobId(id);
+      setProgress(null);
+    },
     cancel: () => cancel.mutate(),
     canCancel: jobId !== null && running && !start.isPending,
     running,

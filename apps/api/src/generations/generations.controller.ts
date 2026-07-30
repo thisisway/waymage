@@ -111,6 +111,42 @@ export class GenerationsController {
     return this.generations.select(principal, resultId, requestId(request));
   }
 
+  /** Variação: mesma cena, outra saída. */
+  @Post('generation-results/:resultId/variation')
+  @RequireRole(WorkspaceRole.MEMBER)
+  @HttpCode(HttpStatus.ACCEPTED)
+  variation(
+    @Principal() principal: RequestPrincipal,
+    @Param('resultId', ParseUUIDPipe) resultId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<GenerationJobView> {
+    return this.generations.variation(
+      principal,
+      resultId,
+      idempotencyKey?.trim() || randomUUID(),
+      requestId(request),
+    );
+  }
+
+  /** Refinamento: mesma saída em qualidade final. */
+  @Post('generation-results/:resultId/refine')
+  @RequireRole(WorkspaceRole.MEMBER)
+  @HttpCode(HttpStatus.ACCEPTED)
+  refine(
+    @Principal() principal: RequestPrincipal,
+    @Param('resultId', ParseUUIDPipe) resultId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<GenerationJobView> {
+    return this.generations.refine(
+      principal,
+      resultId,
+      idempotencyKey?.trim() || randomUUID(),
+      requestId(request),
+    );
+  }
+
   /**
    * Progresso em tempo real.
    *

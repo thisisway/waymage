@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 6 concluídas.** Próxima: Fase 7 (resultados: variação, refinamento, exportação).
+Estado atual: **Fases 1 a 7 concluídas.** Próxima: Fase 8 (edição localizada por máscara).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -140,17 +140,26 @@ casos.
 
 ---
 
-## 🔜 Fase 7 — Resultados
+## ✅ Fase 7 — Resultados
 
-- [ ] Seleção de resultado
-- [ ] `variation` e `refine`
-- [ ] Timeline inferior / histórico
-- [ ] Comparação lado a lado
-- [ ] `ExportJob` + download assinado
+- [x] Seleção de resultado (desde a Fase 5)
+- [x] `variation` — mesma versão da cena, seed nova (D-041)
+- [x] `refine` — mesma seed, qualidade final, uma imagem só
+- [x] Linhagem em `sourceResultId`; histórico de gerações por cena
+- [x] Comparação lado a lado, limitada a duas imagens (D-043)
+- [x] `ExportJob` com conversão de formato no worker e download assinado (D-042)
+
+**Aceite (verificado):** contra a infra real, o histórico da cena mostra
+`TEXT_TO_IMAGE → VARIATION (4 imagens) → REFINE (1 imagem)`, ambas as derivações apontando
+para o mesmo resultado de origem; a exportação converte o PNG para JPEG de verdade (assinatura
+`FF D8 FF`, 14 KB) e a URL vem com `Content-Disposition: attachment`.
+
+**Pendente da fase:** ZIP para exportação de múltiplos resultados (hoje baixa um arquivo por
+imagem) e restaurar uma versão antiga da cena para o rascunho.
 
 ---
 
-## ⬜ Fase 8 — Edição localizada
+## 🔜 Fase 8 — Edição localizada
 
 - [ ] Canvas Konva com zoom e pan
 - [ ] `MaskAsset`: pintar, apagar, inverter, feather, expandir/contrair

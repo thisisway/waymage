@@ -3,6 +3,7 @@ import { AssetsModule } from './assets/assets.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
+import { ExportsModule } from './exports/exports.module';
 import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
 import { InfraModule } from './infra/infra.module';
@@ -28,6 +29,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     ScenesModule,
     AssetsModule,
     GenerationsModule,
+    ExportsModule,
     QueueModule,
     HealthModule,
   ],

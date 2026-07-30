@@ -3,7 +3,7 @@ import { GenerationStatus, OperationType, type Prisma } from '@waymage/database'
 import { isTerminal, STATE_LABELS, STATE_PROGRESS, type GenerationState } from '@waymage/domain';
 import { FakeImageProvider } from '@waymage/provider-sdk';
 import { promptCompiler } from '@waymage/prompt-compiler';
-import { hasBlockingIssues, validateSceneSpec } from '@waymage/scene-spec';
+import { hasBlockingIssues, parseSceneSpec, validateSceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { AppError } from '../common/app-error';
@@ -34,6 +34,8 @@ export interface GenerationJobView {
   statusLabel: string;
   progress: number;
   operationType: OperationType;
+  /** Resultado de origem, em variação e refinamento. */
+  sourceResultId: string | null;
   requestedCount: number;
   selectedProvider: string | null;
   estimatedCredits: number;
@@ -243,6 +245,150 @@ export class GenerationsService {
     return this.get(principal, job.id);
   }
 
+  /**
+   * Variação: mesma cena, seed diferente.
+   *
+   * Reusa a `SceneVersion` do job de origem em vez de tirar um snapshot novo — o ponto da
+   * variação é explorar outra saída da MESMA especificação. Tirar snapshot aqui misturaria
+   * edições feitas depois e a comparação deixaria de ser honesta.
+   */
+  async variation(
+    principal: RequestPrincipal,
+    resultId: string,
+    idempotencyKey: string,
+    requestId?: string,
+  ): Promise<GenerationJobView> {
+    return this.derive(principal, resultId, idempotencyKey, 'VARIATION', requestId);
+  }
+
+  /**
+   * Refinamento: mesma cena em qualidade final, uma imagem só.
+   *
+   * O usuário já escolheu a saída que quer; gastar quatro renderizações caras para explorar
+   * de novo seria desperdício. A qualidade sobe, a contagem cai para um.
+   */
+  async refine(
+    principal: RequestPrincipal,
+    resultId: string,
+    idempotencyKey: string,
+    requestId?: string,
+  ): Promise<GenerationJobView> {
+    return this.derive(principal, resultId, idempotencyKey, 'REFINE', requestId);
+  }
+
+  private async derive(
+    principal: RequestPrincipal,
+    resultId: string,
+    idempotencyKey: string,
+    operation: 'VARIATION' | 'REFINE',
+    requestId?: string,
+  ): Promise<GenerationJobView> {
+    const existing = await this.prisma.generationJob.findUnique({
+      where: {
+        workspaceId_idempotencyKey: { workspaceId: principal.workspaceId, idempotencyKey },
+      },
+      select: { id: true },
+    });
+    if (existing) return this.get(principal, existing.id);
+
+    const source = await this.prisma.generationResult.findFirst({
+      where: { id: resultId, workspaceId: principal.workspaceId },
+      select: {
+        id: true,
+        seed: true,
+        job: {
+          select: {
+            projectId: true,
+            sceneId: true,
+            sceneVersionId: true,
+            providerStrategy: true,
+            sceneVersion: { select: { sceneSpec: true } },
+          },
+        },
+      },
+    });
+    if (!source) throw AppError.notFound('Resultado');
+
+    const spec = parseSceneSpec(source.job.sceneVersion.sceneSpec);
+
+    // Variação mantém o pedido original; refinamento sobe a qualidade e reduz a contagem.
+    const count = operation === 'REFINE' ? 1 : spec.output.count;
+    const mode =
+      operation === 'REFINE' ? 'final' : spec.output.quality === 'final' ? 'final' : 'draft';
+
+    const cost = await this.defaultProvider.estimateCost({
+      requestId: requestId ?? 'derive',
+      prompt: '',
+      references: [],
+      aspectRatio: spec.output.aspectRatio,
+      format: spec.output.format,
+      count,
+      mode,
+    });
+
+    const job = await this.prisma.generationJob.create({
+      data: {
+        workspaceId: principal.workspaceId,
+        projectId: source.job.projectId,
+        sceneId: source.job.sceneId,
+        // Mesma versão da cena: é o que torna a comparação legítima.
+        sceneVersionId: source.job.sceneVersionId,
+        sourceResultId: source.id,
+        status: GenerationStatus.QUEUED,
+        operationType: operation as OperationType,
+        requestedCount: count,
+        providerStrategy: source.job.providerStrategy,
+        estimatedCredits: cost.credits,
+        reservedCredits: 0,
+        idempotencyKey,
+        createdById: principal.user.id,
+      },
+      select: { id: true },
+    });
+
+    try {
+      await this.billing.reserve({
+        workspaceId: principal.workspaceId,
+        amount: cost.credits,
+        generationJobId: job.id,
+      });
+    } catch (error) {
+      await this.prisma.generationJob.update({
+        where: { id: job.id },
+        data: {
+          status: GenerationStatus.FAILED,
+          completedAt: new Date(),
+          errorCode: 'INSUFFICIENT_CREDITS',
+          errorMessage: 'Créditos insuficientes.',
+        },
+      });
+      throw error;
+    }
+
+    await this.prisma.generationJob.update({
+      where: { id: job.id },
+      data: { reservedCredits: cost.credits },
+    });
+
+    await this.queue.enqueue({
+      generationJobId: job.id,
+      workspaceId: principal.workspaceId,
+      requestId: requestId ?? job.id,
+    });
+
+    await this.audit.record({
+      workspaceId: principal.workspaceId,
+      actorUserId: principal.user.id,
+      action: operation === 'REFINE' ? 'generation.refine' : 'generation.variation',
+      resourceType: 'GenerationJob',
+      resourceId: job.id,
+      metadata: { sourceResultId: source.id },
+      ...(requestId ? { requestId } : {}),
+    });
+
+    return this.get(principal, job.id);
+  }
+
   async get(principal: RequestPrincipal, jobId: string): Promise<GenerationJobView> {
     const job = await this.prisma.generationJob.findFirst({
       where: { id: jobId, workspaceId: principal.workspaceId },
@@ -258,6 +404,7 @@ export class GenerationsService {
       statusLabel: STATE_LABELS[job.status as GenerationState],
       progress: STATE_PROGRESS[job.status as GenerationState],
       operationType: job.operationType,
+      sourceResultId: job.sourceResultId,
       requestedCount: job.requestedCount,
       selectedProvider: job.selectedProvider,
       estimatedCredits: job.estimatedCredits,
@@ -423,6 +570,7 @@ const jobSelect = {
   sceneVersionId: true,
   status: true,
   operationType: true,
+  sourceResultId: true,
   requestedCount: true,
   selectedProvider: true,
   estimatedCredits: true,

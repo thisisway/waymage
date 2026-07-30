@@ -18,7 +18,10 @@ export const QUEUE_GENERATION = 'generation' as const;
  */
 export const QUEUE_ASSETS = 'assets' as const;
 
-export const QUEUE_NAMES = [QUEUE_GENERATION, QUEUE_ASSETS] as const;
+/** Conversão de formato para download. Mesmo perfil de CPU dos assets, payload diferente. */
+export const QUEUE_EXPORTS = 'exports' as const;
+
+export const QUEUE_NAMES = [QUEUE_GENERATION, QUEUE_ASSETS, QUEUE_EXPORTS] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
 export const assetJobPayloadSchema = z.object({
@@ -28,6 +31,14 @@ export const assetJobPayloadSchema = z.object({
 });
 
 export type AssetJobPayload = z.infer<typeof assetJobPayloadSchema>;
+
+export const exportJobPayloadSchema = z.object({
+  exportJobId: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  requestId: z.string().min(1),
+});
+
+export type ExportJobPayload = z.infer<typeof exportJobPayloadSchema>;
 
 export const generationJobPayloadSchema = z.object({
   /** Id do GenerationJob no banco — a fila carrega referência, nunca o estado. */

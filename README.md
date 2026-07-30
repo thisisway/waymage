@@ -7,10 +7,10 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fases 1 a 6 concluídas.** Criar conta, projeto e cena, editar o SceneSpec, anexar
-> referências, **gerar imagens** com progresso em tempo real, e um ledger de créditos que
-> reserva antes e devolve quando a geração falha. Tudo com um provedor falso, sem nenhuma
-> chave de API. Falta variação e refinamento, edição por máscara e provedores reais.
+> **Estado: Fases 1 a 7 concluídas.** O ciclo criativo fecha: criar cena, anexar referências,
+> gerar, comparar lado a lado, **variar**, **refinar** e **exportar** — com um ledger de
+> créditos que reserva antes e devolve quando a geração falha. Tudo com um provedor falso, sem
+> nenhuma chave de API. Falta edição por máscara e provedores reais.
 > Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
@@ -156,6 +156,13 @@ A cena tem duas faces: um **rascunho** editável, onde o autosave escreve, e **s
 imutáveis** (`SceneVersion`), criados explicitamente e antes de cada geração. Assim toda
 imagem gerada aponta para um SceneSpec que não muda mais, sem gerar uma versão por tecla
 digitada ([D-024](docs/DECISIONS.md#d-024)).
+
+### Resultados
+
+Cada geração produz uma grade. A partir de qualquer imagem dá para **variar** (mesma
+especificação, outra saída), **refinar** (mesma imagem em qualidade final) ou **exportar**
+em PNG, JPEG ou WebP. Variação e refinamento registram de qual resultado nasceram, o que
+permite ler a linha do tempo de trás para frente.
 
 ### Créditos
 
