@@ -7,10 +7,10 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fases 1, 2 e 3 concluídas.** Já dá para criar conta, projeto e cena, e editar o
-> SceneSpec com autosave, versionamento e validação inline. Ainda não há upload de
-> referências nem geração pela UI. Tudo roda com um provedor falso, sem nenhuma chave de
-> API. Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Estado: Fases 1 a 4 concluídas.** Já dá para criar conta, projeto e cena, editar o
+> SceneSpec com autosave e versionamento, e anexar referências com função e peso. Falta a
+> geração em si — próxima fase. Tudo roda com um provedor falso, sem nenhuma chave de API.
+> Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 

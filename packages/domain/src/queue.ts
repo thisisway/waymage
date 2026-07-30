@@ -11,8 +11,23 @@ import { z } from 'zod';
 
 export const QUEUE_GENERATION = 'generation' as const;
 
-export const QUEUE_NAMES = [QUEUE_GENERATION] as const;
+/**
+ * Fila separada da de geração de propósito: processar um upload leva segundos e é limitado
+ * por CPU, enquanto uma geração leva minutos e fica esperando o provedor. Na mesma fila, um
+ * lote de uploads seguraria as gerações atrás dele.
+ */
+export const QUEUE_ASSETS = 'assets' as const;
+
+export const QUEUE_NAMES = [QUEUE_GENERATION, QUEUE_ASSETS] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
+
+export const assetJobPayloadSchema = z.object({
+  assetId: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  requestId: z.string().min(1),
+});
+
+export type AssetJobPayload = z.infer<typeof assetJobPayloadSchema>;
 
 export const generationJobPayloadSchema = z.object({
   /** Id do GenerationJob no banco — a fila carrega referência, nunca o estado. */

@@ -82,20 +82,32 @@ fixture, nem em comentário, nem em documentação.
 
 ## 5. Uploads e armazenamento
 
-⬜ **Fase 4** (bucket privado já configurado na Fase 1).
+✅ **Fase 4.**
 
-- Bucket **privado**. Sem leitura anônima, sem URL pública, nunca.
-- Fluxo: `POST /assets/upload-url` → PUT direto no storage → `POST /assets/complete`.
-- URL assinada com expiração curta (upload 5 min, leitura 15 min), escopo de método e chave.
-- Validação no `complete`: tipo real por **magic bytes** (não confiar em `Content-Type` nem em
-  extensão), tamanho máximo, hash do conteúdo.
-- Formatos aceitos: JPEG, PNG, WebP. Nada de SVG (vetor de XSS) nem de arquivos com payload
-  embutido.
-- Remoção de metadados EXIF na geração da miniatura — EXIF carrega GPS e identificação de
-  dispositivo.
-- Chaves de objeto incluem `workspaceId` no caminho, o que torna vazamento cross-tenant
-  visível em auditoria.
-- Varredura de malware e política de retenção: Fase 10.
+- Bucket **privado**. Sem leitura anônima, sem URL pública, nunca. A única forma de o browser
+  ver uma imagem é URL assinada de 15 minutos, renovada a cada listagem.
+- Fluxo: `POST /assets/upload-url` → PUT direto no storage → `POST /assets/complete`. O
+  arquivo nunca passa pela API.
+- URL de upload assinada por 5 minutos, com método **e** `Content-Type` no escopo da
+  assinatura.
+- A chave no bucket é gerada a partir de ids nossos, **nunca** derivada do nome enviado —
+  derivar permitiria path traversal (`../../outro-workspace/…`) e colisão entre usuários.
+- Validação no `complete`: tipo real por **assinatura de bytes** ([D-028](DECISIONS.md#d-028)),
+  tamanho real conferido no bucket (a URL assinada não limita quantos bytes cabem nela) e
+  hash SHA-256. O que não passa é apagado do bucket e marcado `QUARANTINED`.
+- Formatos aceitos: JPEG, PNG, WebP. **SVG está fora**: é XML, executa script, é vetor de XSS.
+- EXIF removido na miniatura — carrega GPS e identificação do aparelho
+  ([D-029](DECISIONS.md#d-029), com teste).
+- O worker revalida a assinatura antes de processar: entre a confirmação e o processamento,
+  quem tivesse a URL assinada ainda válida poderia ter trocado o objeto.
+- Decodificação de imagem acontece **só no worker** — a superfície de ataque de um
+  decodificador fica fora do processo que atende HTTP ([D-030](DECISIONS.md#d-030)).
+- Chaves incluem `workspaceId` no caminho, o que torna vazamento cross-tenant visível.
+- Excluir apaga os **bytes** do bucket; a linha sobrevive para auditoria.
+- Os `assetId` dentro do `SceneSpec` são conferidos contra o workspace a cada gravação — sem
+  isso, o IDOR entraria por dentro de um campo JSON, onde os guards não olham.
+
+⬜ Pendente: varredura de malware e política de retenção automática (Fase 10).
 
 ---
 

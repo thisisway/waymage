@@ -30,6 +30,11 @@ const envSchema = z.object({
 
   /** Jobs processados em paralelo por instância de worker. */
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
+  /**
+   * Processar imagem é limitado por CPU: concorrência alta só faz os jobs disputarem os
+   * mesmos núcleos e deixa todos mais lentos.
+   */
+  ASSET_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(2),
   /** Teto de espera pelo provedor antes de desistir. */
   PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 

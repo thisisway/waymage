@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1, 2 e 3 concluídas**. Próxima: Fase 4 (assets e referências).
+Estado atual: **Fases 1 a 4 concluídas**. Próxima: Fase 5 — o primeiro marco funcional.
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -74,20 +74,28 @@ nova; restaurar entra na Fase 7 com a linha do tempo interativa).
 
 ---
 
-## 🔜 Fase 4 — Assets e referências
+## ✅ Fase 4 — Assets e referências
 
-- [ ] `POST /assets/upload-url` (URL assinada) → PUT direto → `POST /assets/complete`
-- [ ] Validação de MIME real (magic bytes), tamanho e hash
-- [ ] Worker de miniatura + remoção de metadados EXIF
-- [ ] Biblioteca no painel esquerdo, com status de processamento
-- [ ] `ReferenceBinding` com `role`, `weight`, `preserve`
-- [ ] Exclusão com política de retenção
+- [x] `POST /assets/upload-url` (URL assinada) → PUT direto → `POST /assets/complete`
+- [x] Tipo real por assinatura de bytes; SVG fora da lista (D-028)
+- [x] Tamanho real conferido no bucket, hash SHA-256, quarentena do que não passa
+- [x] Worker de miniatura em fila própria + remoção de EXIF comprovada por teste (D-029)
+- [x] Biblioteca no painel esquerdo, com status de processamento e polling que para sozinho
+- [x] Referências com `role`, `weight` e `preserve`; `ReferenceBinding` materializado no
+      snapshot (D-031)
+- [x] Exclusão apaga os bytes do bucket e preserva a linha para auditoria
 
-**Aceite:** subir JPEG, ver miniatura, vincular como `identity` peso 0.9, encontrar no SceneSpec persistido.
+**Aceite (verificado):** upload real do browser ao MinIO (CORS confirmado), miniatura gerada
+pelo worker, asset em `READY` com URL assinada. Um HTML com `<script>` declarado como PNG
+chega ao bucket, é **recusado** no `complete` com `UNSUPPORTED_FILE_TYPE` e apagado. Um asset
+de outro workspace referenciado dentro do SceneSpec é bloqueado com `REFERENCE_ASSET_NOT_FOUND`.
+
+**Pendente da fase:** varredura de malware e política de retenção automática (Fase 10);
+análise de referência mais rica que cor dominante e dimensões.
 
 ---
 
-## ⬜ Fase 5 — Geração ponta a ponta (marco funcional)
+## 🔜 Fase 5 — Geração ponta a ponta (marco funcional)
 
 - [ ] `packages/prompt-compiler` com snapshots de teste
 - [ ] Máquina de estados do `GenerationJob`, transições validadas e testadas

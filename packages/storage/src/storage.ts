@@ -74,6 +74,21 @@ export class StorageService {
     return key;
   }
 
+  /**
+   * Baixa o objeto inteiro para a memória.
+   *
+   * Usado para validar o conteúdo de um upload (assinatura de bytes, hash, tamanho real).
+   * Só é seguro porque o teto de upload é pequeno — para arquivo grande, o certo é ler em
+   * streaming e não segurar tudo na memória do processo.
+   */
+  async getObject(key: string): Promise<Buffer> {
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!response.Body) throw new Error(`Objeto vazio: ${key}`);
+    return Buffer.from(await response.Body.transformToByteArray());
+  }
+
   /** URL de leitura temporária. É a única forma de servir um asset ao browser. */
   async signedReadUrl(key: string, expiresIn: number = SIGNED_URL_TTL.read): Promise<string> {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {

@@ -1,5 +1,6 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AuditModule } from './audit/audit.module';
+import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
 import { env } from './config/env';
 import { DevController } from './dev/dev.controller';
@@ -24,6 +25,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     WorkspacesModule,
     ProjectsModule,
     ScenesModule,
+    AssetsModule,
     QueueModule,
     HealthModule,
   ],

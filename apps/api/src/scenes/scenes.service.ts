@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import type { Prisma } from '@waymage/database';
+import { ReferenceRole, type Prisma } from '@waymage/database';
 import {
   createEmptySceneSpec,
   parseSceneSpec,
@@ -9,6 +9,7 @@ import {
   type SceneSpec,
   type ValidationIssue,
 } from '@waymage/scene-spec';
+import { AssetsService } from '../assets/assets.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { PrismaService } from '../infra/prisma.service';
@@ -54,6 +55,7 @@ export class ScenesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly assets: AssetsService,
   ) {}
 
   async list(principal: RequestPrincipal, projectId: string): Promise<SceneSummary[]> {
@@ -85,6 +87,7 @@ export class ScenesService {
 
     const spec =
       input.sceneSpec === undefined ? createEmptySceneSpec() : this.parse(input.sceneSpec);
+    await this.assertReferences(principal.workspaceId, spec);
 
     const scene = await this.prisma.scene.create({
       data: {
@@ -129,6 +132,7 @@ export class ScenesService {
     if (input.name !== undefined) data.name = input.name;
     if (input.sceneSpec !== undefined) {
       const spec = this.parse(input.sceneSpec);
+      await this.assertReferences(principal.workspaceId, spec);
       data.draftSpec = spec as unknown as Prisma.InputJsonValue;
       data.specVersion = spec.version;
     }
@@ -208,6 +212,24 @@ export class ScenesService {
         },
         select: versionSelect,
       });
+
+      // As referências do SceneSpec viram linhas relacionais aqui.
+      //
+      // O SceneSpec continua sendo a fonte da verdade; `ReferenceBinding` é a projeção que
+      // torna possível perguntar "quais cenas usam este asset?" — pergunta necessária para
+      // exclusão e retenção, e que não se responde varrendo JSON.
+      if (spec.references.length > 0) {
+        await tx.referenceBinding.createMany({
+          data: spec.references.map((reference) => ({
+            workspaceId: principal.workspaceId,
+            sceneVersionId: created.id,
+            assetId: reference.assetId,
+            role: reference.role.toUpperCase() as ReferenceRole,
+            weight: reference.weight,
+            preserve: reference.preserve,
+          })),
+        });
+      }
 
       await tx.scene.update({
         where: { id: sceneId },
@@ -308,6 +330,20 @@ export class ScenesService {
       resourceId: sceneId,
       ...(requestId ? { requestId } : {}),
     });
+  }
+
+  /**
+   * As referências do SceneSpec precisam apontar para assets do próprio workspace.
+   *
+   * Sem esta checagem, bastaria escrever o UUID de um asset alheio dentro do campo
+   * `references` para que a geração o utilizasse — o mesmo IDOR das rotas, entrando por
+   * dentro de um campo JSON, onde os guards não olham.
+   */
+  private async assertReferences(workspaceId: string, spec: SceneSpec): Promise<void> {
+    await this.assets.assertAssetsBelongToWorkspace(
+      workspaceId,
+      spec.references.map((reference) => reference.assetId),
+    );
   }
 
   /** Confirma que o projeto é do workspace antes de criar ou listar cenas dentro dele. */

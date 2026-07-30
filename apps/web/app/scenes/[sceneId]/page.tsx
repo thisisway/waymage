@@ -5,6 +5,7 @@ import { validateSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 import { Inspector } from '../../../components/inspector/inspector';
+import { LibraryPanel } from '../../../components/library-panel';
 import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
@@ -106,7 +107,10 @@ export default function SceneEditorPage() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <SectionNav />
+        <aside className="flex w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r border-surface-border bg-surface-raised p-3">
+          <SectionNav />
+          <LibraryPanel projectId={scene.projectId} spec={scene.sceneSpec} onChange={updateSpec} />
+        </aside>
         <Canvas scene={scene} />
         <InspectorPanel
           scene={scene}
@@ -218,7 +222,7 @@ function ModeSelector() {
 function SectionNav() {
   const { section, setSection } = useEditorStore();
   return (
-    <nav className="w-44 shrink-0 border-r border-surface-border bg-surface-raised p-3">
+    <nav>
       <h2 className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-muted">
         Cena
       </h2>

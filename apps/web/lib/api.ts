@@ -138,6 +138,29 @@ export interface SceneSummary {
   updatedAt: string;
 }
 
+export type AssetStatus = 'PENDING_UPLOAD' | 'PROCESSING' | 'READY' | 'FAILED' | 'QUARANTINED';
+
+export interface Asset {
+  id: string;
+  status: AssetStatus;
+  mimeType: string;
+  originalName: string | null;
+  sizeBytes: number | null;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  /** URLs assinadas, curtas. Renovadas a cada listagem — não guardar em cache longo. */
+  url: string | null;
+  thumbnailUrl: string | null;
+}
+
+export interface UploadTicket {
+  assetId: string;
+  uploadUrl: string;
+  contentType: string;
+  expiresInSeconds: number;
+}
+
 export interface SceneVersion {
   id: string;
   versionNumber: number;
@@ -188,7 +211,48 @@ export const api = {
 
   createVersion: (sceneId: string, input: { changeSummary?: string }) =>
     apiFetch<SceneVersion>(`/scenes/${sceneId}/versions`, { method: 'POST', body: input }),
+
+  listAssets: (projectId: string) => apiFetch<Asset[]>(`/projects/${projectId}/assets`),
+
+  deleteAsset: (assetId: string) => apiFetch<void>(`/assets/${assetId}`, { method: 'DELETE' }),
 };
+
+/**
+ * Upload em três passos (blueprint §16).
+ *
+ * O arquivo vai do browser direto ao storage, sem passar pela API — o que evita que um
+ * upload de 15 MB ocupe memória do processo que atende todo mundo. A API só assina a URL e,
+ * depois, confere o que realmente chegou.
+ */
+export async function uploadAsset(projectId: string, file: File): Promise<Asset> {
+  const ticket = await apiFetch<UploadTicket>('/assets/upload-url', {
+    method: 'POST',
+    body: {
+      projectId,
+      filename: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    },
+  });
+
+  // Sem `credentials`: a URL assinada já carrega a autorização, e mandar cookie para o
+  // storage seria vazar a sessão para um host que não precisa dela.
+  const upload = await fetch(ticket.uploadUrl, {
+    method: 'PUT',
+    body: file,
+    // Precisa bater exatamente com o tipo assinado, senão o storage recusa a assinatura.
+    headers: { 'content-type': ticket.contentType },
+  });
+
+  if (!upload.ok) {
+    throw new ApiError('UPLOAD_FAILED', 'Falha ao enviar o arquivo.', upload.status);
+  }
+
+  return apiFetch<Asset>('/assets/complete', {
+    method: 'POST',
+    body: { assetId: ticket.assetId },
+  });
+}
 
 /** Chaves de cache do TanStack Query, num lugar só para não divergirem entre telas. */
 export const queryKeys = {
@@ -198,4 +262,5 @@ export const queryKeys = {
   scenes: (projectId: string) => ['projects', projectId, 'scenes'] as const,
   scene: (id: string) => ['scenes', id] as const,
   versions: (sceneId: string) => ['scenes', sceneId, 'versions'] as const,
+  assets: (projectId: string) => ['projects', projectId, 'assets'] as const,
 };

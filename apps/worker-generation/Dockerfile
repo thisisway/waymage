@@ -25,6 +25,8 @@ RUN pnpm db:generate && pnpm --filter @waymage/worker-generation... build
 
 FROM base AS runtime
 ENV NODE_ENV=production
+# O sharp usa libvips; na Alpine o binário pré-compilado depende destas bibliotecas.
+RUN apk add --no-cache vips-cpp
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/worker-generation/package.json apps/worker-generation/

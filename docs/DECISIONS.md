@@ -435,6 +435,82 @@ atualiza o cache diretamente (`setQueryData`) e o autosave confirma com o servid
 
 ---
 
+## D-028 — Tipo do arquivo decidido pelos bytes, nunca pelo cliente
+
+**Status:** aceita (Fase 4)
+
+`Content-Type` e extensão são texto enviado pelo usuário. Nada impede pedir URL assinada
+declarando `image/png` e subir um HTML com `<script>` — e esse arquivo voltaria ao browser
+depois, servido do nosso domínio.
+
+`detectImageType` lê a assinatura dos primeiros bytes e é a única autoridade sobre o tipo. Ela
+mora em `packages/domain` porque API e worker precisam da **mesma** função: duas
+implementações da mesma regra de segurança divergem na primeira alteração.
+
+Consequências:
+
+- Arquivo não identificado é **apagado do bucket** no ato e a linha vai para `QUARANTINED` —
+  não fica guardado esperando alguém descobrir um jeito de servi-lo.
+- Quando o declarado difere do real, prevalece o real, com log de aviso.
+- O worker verifica de novo antes de processar: entre a confirmação e o processamento, quem
+  tivesse a URL assinada ainda válida poderia ter trocado o objeto.
+- **SVG está fora** da lista de permitidos. É XML, executa script e é vetor de XSS conhecido.
+
+---
+
+## D-029 — Metadados EXIF removidos no processamento
+
+**Status:** aceita (Fase 4)
+
+EXIF carrega coordenadas de GPS, modelo do aparelho e data. Um retrato enviado como
+referência não deveria revelar onde a pessoa estava — e o blueprint §16 pede a remoção.
+
+O `sharp` descarta metadados por padrão; o que os preservaria é `withMetadata()`, que
+deliberadamente **não** é chamado. Como isso é uma garantia de privacidade e não um detalhe,
+`asset-processor.test.ts` cria um JPEG com EXIF de propósito, confirma que ele está lá e
+verifica que sumiu da miniatura — inclusive procurando as strings no arquivo bruto.
+
+`.rotate()` vem antes do resize para aplicar a orientação do EXIF **enquanto ele ainda
+existe**; sem isso, fotos de celular sairiam deitadas depois da remoção.
+
+---
+
+## D-030 — `sharp` no worker, e só nele
+
+**Status:** aceita (Fase 4) · cumpre o previsto em [D-018](#d-018)
+
+A D-018 dizia: "miniaturas de uploads reais (Fase 4) são outro problema e aí sim entra uma
+biblioteca de imagem". É este o momento. Decodificar JPEG, PNG e WebP arbitrários,
+redimensionar com qualidade e remover metadados não se faz à mão.
+
+Fica contido no worker: a API nunca decodifica imagem — ela só lê os primeiros bytes para
+identificar o tipo. Assim a superfície de ataque de um decodificador de imagem (historicamente
+uma fonte fértil de CVEs) fica fora do processo que atende requisições HTTP.
+
+Na Alpine, o binário do `sharp` depende de `vips-cpp`, instalado no estágio de runtime do
+Dockerfile.
+
+---
+
+## D-031 — `ReferenceBinding` é projeção, não fonte da verdade
+
+**Status:** aceita (Fase 4)
+
+As referências vivem dentro do `SceneSpec` (`references[]`), que é a fonte da verdade. As
+linhas de `ReferenceBinding` são criadas junto com o snapshot da versão.
+
+Existem para responder "quais cenas usam este asset?" — pergunta necessária para exclusão e
+política de retenção, e que não se responde varrendo JSON. Manter as duas em sincronia
+contínua seria trabalho dobrado; materializar no snapshot resolve, porque é exatamente aí que
+a informação passa a ser permanente.
+
+**Validação de tenancy dentro do JSON:** todo SceneSpec gravado tem seus `assetId` conferidos
+contra o workspace. Sem isso, bastaria escrever o UUID de um asset alheio no campo
+`references` para usá-lo numa geração — o mesmo IDOR das rotas, entrando por um caminho onde
+os guards não olham.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
