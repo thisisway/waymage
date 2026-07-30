@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 
+import fastifyCookie from '@fastify/cookie';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -7,7 +8,9 @@ import type { FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/http-exception.filter';
+import { registerRateLimit } from './common/rate-limit';
 import { env } from './config/env';
+import { RedisService } from './infra/redis.service';
 
 async function bootstrap(): Promise<void> {
   const adapter = new FastifyAdapter({
@@ -18,15 +21,23 @@ async function bootstrap(): Promise<void> {
     requestIdHeader: 'x-request-id',
     // Limite defensivo; uploads não passam pela API, vão direto ao storage por URL assinada.
     bodyLimit: 1024 * 1024,
+    // Confia no proxy para obter o IP real — necessário para o rate limit funcionar atrás
+    // do reverse proxy do EasyPanel. Sem isso, todo request vem do IP do proxy.
+    trustProxy: env.TRUST_PROXY,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     bufferLogs: true,
   });
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // Cookies precisam estar disponíveis antes de qualquer guard rodar.
+  await app.register(fastifyCookie);
 
-  // Sessão será por cookie (D-009), então a origem precisa ser explícita e com credenciais.
+  app.useGlobalFilters(new HttpExceptionFilter());
+  registerRateLimit(app.getHttpAdapter().getInstance(), app.get(RedisService).client);
+
+  // Sessão por cookie exige origem explícita: `origin: true` com credenciais aceitaria
+  // qualquer site e anularia a proteção do SameSite.
   app.enableCors({ origin: env.APP_URL, credentials: true });
   app.enableShutdownHooks();
 

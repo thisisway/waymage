@@ -292,6 +292,78 @@ carga real medida.
 
 ---
 
+## D-020 — scrypt para senha, refresh token opaco
+
+**Status:** aceita (Fase 2) · substitui parte da [D-009](#d-009)
+
+**Senha com `crypto.scrypt` da stdlib.** scrypt é memory-hard e consta na lista de KDFs
+aceitáveis do OWASP. argon2id seria a primeira escolha teórica, mas todas as implementações
+para Node são módulos nativos — binário por plataforma, glibc contra musl, compilação em
+imagem Docker. Zero dependências vale mais aqui do que a diferença marginal entre os dois.
+Parâmetros N=2^17, r=8, p=1, gravados dentro do próprio hash para permitir rotação depois.
+
+**Refresh token opaco, não JWT.** O `.env.example` previa `JWT_REFRESH_SECRET`; ele não
+existe mais. Refresh precisa ser revogável _na hora_ — JWT só expira. O token é 32 bytes
+aleatórios, guardado apenas como SHA-256: vazamento do banco não permite assumir sessão.
+
+Rotação com detecção de reuso: cada refresh vale uma troca, e um token já consumido que
+reaparece significa cookie copiado. A família inteira é revogada, derrubando atacante e dono
+— não há como distinguir os dois, e deslogar ambos é o lado seguro do erro.
+
+**O access token não carrega workspace nem papel.** Se carregasse, remover alguém de um
+workspace só teria efeito ao expirar o token: até 15 minutos de acesso indevido. A associação
+é lida do banco a cada request — consulta indexada, barata perto de autorização defasada.
+
+---
+
+## D-021 — Cloudflare R2 como storage de produção
+
+**Status:** aceita (a implementar no deploy) · complementa [D-007](#d-007) e [D-019](#d-019)
+
+MinIO no mesmo VPS significa que perder o host é perder as imagens dos usuários, que são
+irrecuperáveis — diferente do banco, que pode ser restaurado de dump. R2 fala a API do S3,
+não cobra egress e o `StorageService` já está pronto: a troca é variável de ambiente, não
+código. É exatamente o retorno que a D-007 antecipava.
+
+MinIO continua no `docker-compose.yml` para desenvolvimento local, onde não faz sentido
+depender de rede e de credencial externa.
+
+---
+
+## D-022 — CSRF exigido em tudo, menos em login e cadastro
+
+**Status:** aceita (Fase 2)
+
+A sessão vive em cookie (D-009), então o browser a envia sozinho em requisições disparadas
+por qualquer site — daí a proteção double-submit: o cookie `wm_csrf`, legível, precisa bater
+com o header `x-csrf-token`. Um site atacante consegue fazer o browser mandar o cookie, mas
+a same-origin policy o impede de ler o valor para replicar no header.
+
+`/auth/login` e `/auth/register` são a exceção, marcados com `@NoCsrf()`: quem entra pela
+primeira vez ainda não tem cookie algum, e exigir o token tornaria o login impossível. Essas
+rotas não se autorizam por credencial ambiente — a autorização é o corpo da requisição, que
+o atacante não conhece. `/auth/refresh` e `/auth/logout` **continuam exigindo** CSRF, porque
+esses sim se autorizam pelo cookie de refresh.
+
+A exceção é decorator explícito, e não regra implícita por caminho: fica auditável em revisão
+de código quem está fora da proteção.
+
+---
+
+## D-023 — Guards globais, acesso público é opt-in
+
+**Status:** aceita (Fase 2)
+
+O `AuthGuard` é registrado como `APP_GUARD`: toda rota nasce exigindo sessão, e abrir uma
+exige `@Public()` explícito. O contrário — proteger rota a rota — falha por omissão, e a
+omissão é silenciosa: ninguém percebe que um endpoint novo ficou aberto até alguém encontrar.
+
+O custo apareceu na hora: `/health` passou a responder 401 e só foi notado ao rodar a imagem
+de produção — um balanceador leria isso como serviço fora do ar e entraria em loop de
+restart. Está corrigido e coberto por `test/health.integration.test.ts`, para não voltar.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

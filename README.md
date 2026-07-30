@@ -7,9 +7,9 @@ cenário, câmera, iluminação, composição, estilo e saída. O sistema conver
 `SceneSpec` estruturado, valida conflitos, compila o prompt, escolhe o provedor, executa a
 geração de forma assíncrona e guarda os resultados versionados.
 
-> **Estado: Fase 1 (fundação) concluída.** Ainda não há autenticação, upload nem geração a
-> partir da UI. O que existe roda ponta a ponta com um provedor falso, sem nenhuma chave de
-> API. Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Estado: Fases 1 e 2 concluídas.** Já dá para criar conta, entrar e gerenciar projetos com
+> isolamento entre workspaces. Ainda não há cenas, upload nem geração pela UI. Tudo roda com
+> um provedor falso, sem nenhuma chave de API. Detalhes em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
@@ -62,16 +62,38 @@ As portas de infraestrutura são deslocadas das padrão — Postgres em **5442**
 ```bash
 # Postgres, Redis e S3 devem aparecer como "ok"
 curl http://localhost:3333/health
-
-# Enfileira uma geração: o worker produz 4 PNGs e grava no MinIO
-curl -X POST http://localhost:3333/dev/smoke-generation
-
-# Progresso publicado pelo worker
-curl http://localhost:3333/dev/events
 ```
 
-Os arquivos aparecem no console do MinIO, em
-`waymage-dev/workspaces/<workspaceId>/…/generations/<jobId>/`.
+Depois abra http://localhost:3000, crie uma conta e um projeto. O cadastro já cria o
+workspace e a carteira de créditos junto.
+
+---
+
+## Deploy
+
+Alvo: **EasyPanel** ([D-019](docs/DECISIONS.md#d-019)). Há um Dockerfile por app, todos
+buildados a partir da **raiz** do monorepo:
+
+```bash
+docker build -f apps/api/Dockerfile               -t waymage-api .
+docker build -f apps/worker-generation/Dockerfile -t waymage-worker .
+docker build -f apps/web/Dockerfile               -t waymage-web  \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.seudominio.com
+```
+
+Pontos que mordem se passarem despercebidos:
+
+- **`NEXT_PUBLIC_API_URL` é embutida no build** do frontend, não lida em runtime. Trocar a
+  URL da API exige rebuild da imagem web.
+- **Só a API aplica migrations**, no entrypoint (`prisma migrate deploy`). O worker sobe
+  direto. Defina `RUN_MIGRATIONS=false` se preferir rodá-las como passo separado.
+- **`TRUST_PROXY=true`** atrás do proxy do EasyPanel, senão o rate limit enxerga todos os
+  requests vindos do mesmo IP.
+- **`NODE_ENV=production`** é o que remove as rotas `/dev/*`.
+- **`JWT_ACCESS_SECRET` precisa de 32+ caracteres** e a API se recusa a subir sem isso.
+- Storage de produção: Cloudflare R2 ([D-021](docs/DECISIONS.md#d-021)) — só variáveis de
+  ambiente, o código é o mesmo. MinIO fica para desenvolvimento local.
+- Configure **backup do Postgres para fora do host** antes do primeiro usuário real.
 
 ---
 
@@ -126,6 +148,12 @@ SceneSpec → validação de conflitos → prompt compiler → ImageProvider →
 
 Cada alteração de cena cria uma `SceneVersion` imutável, e toda geração aponta para uma
 versão específica: sempre dá para saber exatamente o que gerou uma imagem.
+
+### Sessão e isolamento
+
+Sessão em cookie `httpOnly` (o front nunca lê o token), com CSRF double-submit nas mutações.
+`workspaceId` é sempre resolvido da sessão, nunca aceito do cliente — e recurso de outro
+workspace responde 404, não 403, para não confirmar que existe.
 
 A geração é assíncrona: a API valida, reserva créditos e enfileira; o worker executa e
 publica progresso por Redis pub/sub, que a API reemite por SSE.

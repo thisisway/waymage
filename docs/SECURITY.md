@@ -37,31 +37,46 @@ fixture, nem em comentário, nem em documentação.
 
 ## 3. Autenticação e sessão
 
-⬜ **Fase 2.**
+✅ **Fase 2.**
 
-- Senha com argon2id (`memoryCost` ≥ 19 MiB, `timeCost` ≥ 2), nunca bcrypt novo, nunca SHA.
-- Access token JWT curto (15 min) + refresh rotacionado (7 dias) com detecção de reuso —
-  reuso de refresh revoga a família inteira de tokens.
-- Ambos em cookie `httpOnly` + `Secure` + `SameSite=Lax`. O front nunca lê o token. Ver
-  [D-009](DECISIONS.md#d-009).
-- CSRF: double-submit token em toda mutação, já que a sessão é por cookie.
-- Rate limit em `/auth/login` e `/auth/register` por IP e por identificador.
-- Resposta de login idêntica para usuário inexistente e senha errada (sem enumeração).
+- Senha com **scrypt** (N=2^17, r=8, p=1), da stdlib do Node — memory-hard e aceito pelo
+  OWASP. Ver [D-020](DECISIONS.md#d-020) para por que não argon2id.
+- Access token JWT curto (15 min) + refresh **opaco** rotacionado (7 dias), guardado só como
+  hash SHA-256. Reuso de refresh revoga a família inteira de tokens.
+- Ambos em cookie `httpOnly` + `Secure` (fora de dev) + `SameSite=Lax`. O front nunca lê o
+  token. O refresh tem `path=/auth`, então nem é enviado no resto da API.
+- CSRF: double-submit em toda mutação, exceto login e cadastro, que não se autorizam por
+  cookie ([D-022](DECISIONS.md#d-022)).
+- Rate limit em `/auth/*` por IP, com contador no Redis — 10 logins / 5 min, 5 cadastros / h.
+- Resposta de login **idêntica** para usuário inexistente e senha errada, incluindo o tempo
+  de resposta: um hash dummy é verificado quando o e-mail não existe, para que a latência não
+  denuncie quem está cadastrado. Coberto por teste.
+
+⬜ Pendente: verificação de e-mail e segundo fator.
 
 ---
 
 ## 4. Autorização e isolamento multi-tenant
 
-⬜ **Fase 2** — é o controle mais crítico do sistema.
+✅ **Fase 2** — é o controle mais crítico do sistema.
 
-- Toda entidade multi-tenant carrega `workspaceId`. Já está no schema Prisma (Fase 1).
+- Toda entidade multi-tenant carrega `workspaceId`.
 - `workspaceId` é resolvido **do contexto da sessão**, nunca aceito do body ou da query.
-  Aceitar do cliente é IDOR por construção.
-- Guard global exige workspace resolvido; endpoints que não exigem são opt-out explícito.
-- RBAC por papel de membro: `OWNER` > `ADMIN` > `MEMBER` > `VIEWER`.
+  Aceitar do cliente é IDOR por construção. Vive em `request.principal`, e é a única fonte
+  que os services consultam.
+- Guard global (`APP_GUARD`): rota nova nasce protegida; abrir exige `@Public()` explícito
+  ([D-023](DECISIONS.md#d-023)).
+- RBAC por papel: `OWNER` > `ADMIN` > `MEMBER` > `VIEWER`, com `@RequireRole()` por rota.
+  Criar projeto exige MEMBER; apagar exige ADMIN.
+- Toda query filtra por `workspaceId` **e** `deletedAt: null`. Escrita confirma
+  pertencimento antes de alterar — `update` só por id permitiria editar recurso alheio
+  conhecendo o UUID.
 - Recurso de outro workspace responde **404**, não 403 — 403 confirma existência.
-- Cada endpoint ganha um teste de integração que tenta acessá-lo com sessão de outro
-  workspace. Sem esse teste, o endpoint não é considerado pronto.
+- `test/tenancy.integration.test.ts` roda contra Postgres real e cobre leitura, alteração e
+  exclusão cross-tenant, mais listagem de projetos e de membros. Teste com mock não pegaria
+  o risco real, que é um `where` esquecendo `workspaceId`.
+
+⬜ Pendente: troca de workspace ativo (hoje o guard usa a associação mais antiga do usuário).
 
 ---
 
@@ -161,17 +176,21 @@ fixture, nem em comentário, nem em documentação.
 
 ## 11. Estado atual — resumo honesto
 
-| Controle                                   | Estado             |
-| ------------------------------------------ | ------------------ |
-| Segredos fora do repositório, env validado | ✅ Fase 1          |
-| Erros sem vazamento de detalhe interno     | ✅ Fase 1          |
-| Bucket privado, credencial escopada        | ✅ Fase 1 (config) |
-| `workspaceId` no modelo de dados           | ✅ Fase 1 (schema) |
-| Autenticação, RBAC, isolamento em runtime  | ⬜ Fase 2          |
-| Validação de upload, URL assinada          | ⬜ Fase 4          |
-| Ledger transacional, idempotência          | ⬜ Fase 6          |
-| Moderação, consentimento, retenção         | ⬜ Fase 10         |
-| CSP, rate limiting, scan no CI             | ⬜ Fase 11         |
+| Controle                                     | Estado             |
+| -------------------------------------------- | ------------------ |
+| Segredos fora do repositório, env validado   | ✅ Fase 1          |
+| Autenticação, RBAC, isolamento em runtime    | ✅ Fase 2          |
+| CSRF, rate limit em `/auth/*`, auditoria     | ✅ Fase 2          |
+| Container sem root, migrations no entrypoint | ✅ Fase 2          |
+| Erros sem vazamento de detalhe interno       | ✅ Fase 1          |
+| Bucket privado, credencial escopada          | ✅ Fase 1 (config) |
+| `workspaceId` no modelo de dados             | ✅ Fase 1 (schema) |
+| Validação de upload, URL assinada            | ⬜ Fase 4          |
+| Ledger transacional, idempotência            | ⬜ Fase 6          |
+| Moderação, consentimento, retenção           | ⬜ Fase 10         |
+| CSP, headers de segurança, scan no CI        | ⬜ Fase 11         |
 
-**Não há autenticação em runtime hoje.** A API da Fase 1 expõe apenas `/health` e não deve ser
-exposta fora de `localhost`.
+**O que ainda falta antes de expor publicamente:** verificação de e-mail, CSP e headers de
+segurança, e backup do banco configurado. `/dev/*` já não existe fora de desenvolvimento, e
+`NODE_ENV=production` é o que garante isso — conferir a variável no ambiente antes do
+primeiro deploy.

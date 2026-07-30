@@ -1,7 +1,17 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
+import { Public } from '../auth/auth.guard';
 import { HealthService, type HealthReport } from './health.service';
 
+/**
+ * Health checks são públicos por necessidade: quem consulta é o orquestrador, que não tem
+ * sessão. Sem `@Public()`, o guard global responde 401, o balanceador entende "fora do ar"
+ * e o serviço entra em loop de restart.
+ *
+ * O que é exposto é deliberadamente pobre — nome da dependência, estado e latência. Nunca
+ * host, credencial ou mensagem de erro do driver.
+ */
+@Public()
 @Controller()
 export class HealthController {
   constructor(private readonly health: HealthService) {}

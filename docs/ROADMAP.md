@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fase 1 concluída**. Próxima: Fase 2 (aguardando aprovação).
+Estado atual: **Fases 1 e 2 concluídas**. Próxima: Fase 3 (cenas, versões e autosave).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -29,22 +29,31 @@ API → fila → worker → FakeImageProvider → MinIO e grava 4 PNGs, sem nenh
 
 ---
 
-## 🔜 Fase 2 — Auth e tenancy
+## ✅ Fase 2 — Auth, tenancy e imagens de container
 
-- [ ] `User` + registro e login (argon2)
-- [ ] Sessão JWT em cookie httpOnly, refresh rotacionado, proteção CSRF
-- [ ] `Workspace` + `WorkspaceMember` + papéis (OWNER/ADMIN/MEMBER/VIEWER)
-- [ ] Guard de tenancy global — `workspaceId` resolvido do contexto, nunca do body
-- [ ] `Project` CRUD com soft delete
-- [ ] `AuditLog` das operações de escrita
-- [ ] Telas: login, registro, lista de projetos
-- [ ] Testes de integração de isolamento cross-tenant em cada endpoint
+- [x] `User` + registro e login (scrypt da stdlib, ver D-020)
+- [x] Access token JWT (15 min) + refresh opaco rotacionado com detecção de reuso
+- [x] Cookies httpOnly + proteção CSRF double-submit (D-022)
+- [x] `Workspace` + `WorkspaceMember` + papéis (OWNER/ADMIN/MEMBER/VIEWER)
+- [x] Guard global — `workspaceId` resolvido da sessão, nunca do body (D-023)
+- [x] `Project` CRUD com soft delete e RBAC por rota
+- [x] `AuditLog` das operações de escrita
+- [x] Rate limit em `/auth/*` com contador no Redis
+- [x] Telas: login, cadastro, lista de projetos
+- [x] Dockerfile por app + entrypoint que aplica migrations
+- [x] 14 testes de integração de isolamento cross-tenant
 
-**Aceite:** usuário do workspace A recebe 404 em todo recurso do workspace B.
+**Aceite (verificado):** Bob recebe **404** — não 403 — ao ler, alterar ou apagar projeto da
+Alice; mutação sem CSRF é recusada; login com e-mail inexistente e com senha errada devolvem
+resposta idêntica; reuso de refresh revoga a família inteira. As três imagens buildam, e a
+imagem de produção aplica migrations, responde `/health` sem sessão e não expõe `/dev/*`.
+
+**Pendente da fase:** convite por e-mail para quem ainda não tem conta (depende de serviço de
+e-mail) e troca de workspace ativo na UI (hoje o guard usa a associação mais antiga).
 
 ---
 
-## ⬜ Fase 3 — Cenas, versões e autosave
+## 🔜 Fase 3 — Cenas, versões e autosave
 
 - [ ] `Scene` CRUD
 - [ ] `SceneVersion` imutável, `parentVersionId`, `changeSummary`, duplicação

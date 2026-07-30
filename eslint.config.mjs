@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/*.config.js',
       '**/*.config.mjs',
       '**/generated/**',
+      // Gerado pelo Next a cada build.
+      '**/next-env.d.ts',
     ],
   },
   js.configs.recommended,

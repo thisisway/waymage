@@ -11,8 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-fastify": "^11.0.1",
     "@waymage/database": "workspace:*",
     "@waymage/domain": "workspace:*",
@@ -29,8 +31,10 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
+    "@swc/core": "^1.15.47",
     "@types/node": "^22.10.7",
     "typescript": "^5.7.3",
+    "unplugin-swc": "^1.5.9",
     "vitest": "^3.0.2"
   }
 }

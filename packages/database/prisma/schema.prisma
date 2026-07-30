@@ -143,6 +143,7 @@ model User {
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
   memberships     WorkspaceMember[]
+  refreshTokens   RefreshToken[]
   sceneVersions   SceneVersion[]
   generationJobs  GenerationJob[]
   auditLogs       AuditLog[]
@@ -151,6 +152,31 @@ model User {
   exportJobs      ExportJob[]
 
   @@map("users")
+}
+
+/// Refresh token rotacionado, guardado como HASH — o valor em claro só existe no cookie do
+/// usuário. Vazamento do banco não permite assumir sessão.
+///
+/// `family` agrupa todos os tokens descendentes de um mesmo login. Se um token já usado
+/// reaparecer, significa que alguém copiou o cookie: a família inteira é revogada, o que
+/// desloga tanto o atacante quanto o dono — o certo, porque não há como distinguir os dois.
+model RefreshToken {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  /// SHA-256 do token. Nunca o token em si.
+  tokenHash     String    @unique
+  family        String    @db.Uuid
+  expiresAt     DateTime  @db.Timestamptz(6)
+  /// Marcado ao ser trocado por outro. Reuso de token consumido dispara a revogação.
+  consumedAt    DateTime? @db.Timestamptz(6)
+  revokedAt     DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, family])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 model Workspace {

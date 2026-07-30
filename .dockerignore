@@ -1,0 +1,23 @@
+# Reduz o contexto enviado ao daemon e, principalmente, impede que segredos e artefatos
+# locais entrem na imagem.
+
+# Segredos — jamais dentro de uma imagem.
+.env
+.env.*
+!.env.example
+
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/generated
+**/coverage
+**/*.tsbuildinfo
+
+.git
+.github
+docs
+infra
+*.md
+!README.md
