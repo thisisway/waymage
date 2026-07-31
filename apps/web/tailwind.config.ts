@@ -12,18 +12,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        /** Rampa de elevação derivada da Way Dark, preservando o matiz azulado. */
+        /**
+         * Superfícies em cinza NEUTRO, não na Way Dark.
+         *
+         * É uma ferramenta de trabalho com imagem: qualquer dominante de cor no fundo
+         * contamina a percepção do que está sendo produzido — um fundo azulado faz a imagem
+         * gerada parecer mais quente do que é. Figma, Lightroom e DaVinci usam cinza neutro
+         * pela mesma razão. Ver docs/DECISIONS.md D-046.
+         *
+         * O ganho é duplo: sobre cinza, o Way Blue destaca de verdade; sobre navy, ele se
+         * dissolvia no fundo.
+         */
         surface: {
-          base: '#0B1023',
-          raised: '#10162E',
-          overlay: '#161D3B',
-          hover: '#1D2649',
-          border: '#232C52',
+          base: '#171717',
+          raised: '#1E1E1E',
+          overlay: '#262626',
+          hover: '#303030',
+          border: '#2E2E2E',
         },
         ink: {
-          primary: '#F2F5FF',
-          secondary: '#A8B2CF',
-          muted: '#6B769B',
+          primary: '#F5F5F5',
+          secondary: '#B4B4B4',
+          muted: '#7A7A7A',
         },
         /** Way Blue e sua rampa, direto do DS. */
         accent: {
@@ -66,10 +76,12 @@ export default {
       },
 
       boxShadow: {
-        xs: '0 1px 3px rgba(11,16,35,.08)',
-        sm: '0 2px 8px rgba(11,16,35,.10)',
-        md: '0 4px 16px rgba(11,16,35,.12)',
-        lg: '0 8px 32px rgba(11,16,35,.15)',
+        // Sombras em preto neutro: com o fundo cinza, a sombra azulada do DS deixava um
+        // halo colorido em volta de cada cartão.
+        xs: '0 1px 3px rgba(0,0,0,.30)',
+        sm: '0 2px 8px rgba(0,0,0,.35)',
+        md: '0 4px 16px rgba(0,0,0,.40)',
+        lg: '0 8px 32px rgba(0,0,0,.45)',
         /** Destaque do DS: reservado para o que está ativo ou em foco. */
         glow: '0 16px 48px rgba(29,102,255,.20)',
         'glow-sm': '0 4px 16px rgba(29,102,255,.25)',

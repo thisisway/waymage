@@ -5,10 +5,10 @@
 /**
  * Way Cloud Design System v1.0.
  *
- * As cores primárias, a escala tipográfica, os raios e as sombras vêm do DS. As superfícies
- * intermediárias do modo escuro NÃO estão especificadas lá — o DS define apenas `#0B1023`
- * como fundo — então a rampa abaixo foi derivada dele preservando o matiz azulado, para que
- * os níveis de elevação pertençam à mesma família. Ver docs/DECISIONS.md D-044.
+ * Cor primária, escala tipográfica, raios e sombras vêm do DS. As superfícies são a exceção
+ * deliberada: o DS define `#0B1023` como fundo, mas esta é uma ferramenta de trabalho com
+ * imagem, e fundo colorido contamina a percepção do que está sendo produzido. Cinza neutro,
+ * como Figma e Lightroom. Ver docs/DECISIONS.md D-046.
  */
 @layer base {
   :root {

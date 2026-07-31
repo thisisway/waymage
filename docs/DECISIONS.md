@@ -799,6 +799,46 @@ se nao houver pergunta, nao ha animacao.
 
 ---
 
+## D-046 — Superficies em cinza neutro, nao na Way Dark
+
+**Status:** aceita · ajusta a [D-044](#d-044)
+
+O DS define `#0B1023` como fundo. Aplicado ao editor inteiro, o resultado foi uma tela
+uniformemente azulada em que o proprio Way Blue se dissolvia — o botao primario deixava de
+parecer primario.
+
+Mas o argumento decisivo nao e estetico: **isto e uma ferramenta de trabalho com imagem.**
+Qualquer dominante de cor no fundo contamina a percepcao do que esta sendo produzido; um
+fundo azulado faz a imagem gerada parecer mais quente do que ela e. Figma, Lightroom,
+Photoshop e DaVinci usam cinza neutro por essa razao, nao por gosto.
+
+As superficies passam a ser cinza neutro (`#171717` → `#1E1E1E` → `#262626` → `#303030`,
+borda `#2E2E2E`). As sombras acompanham, em preto neutro: com fundo cinza, a sombra azulada
+do DS deixava um halo colorido em volta de cada cartao.
+
+**O Way Blue continua sendo o acento, e ganha com a mudanca** — sobre cinza ele destaca de
+verdade. A marca permanece; o que muda e o palco.
+
+---
+
+## D-047 — A capa do projeto e a ultima imagem que ele gerou
+
+**Status:** aceita
+
+Reconhecer um projeto pelo que ele produziu e imediato; ler o nome de doze projetos, nao. A
+lista passa a ser um navegador de arquivos com capa, como o Figma faz com as thumbnails de
+canvas — so que a nossa capa e a propria entrega do produto.
+
+`ProjectView.previewUrl` traz a URL assinada do ultimo `Asset` gerado. Uma consulta unica
+para todos os projetos, e nao uma por projeto: a lista e a primeira tela depois do login, e
+N+1 ali apareceria como lentidao logo na entrada.
+
+Projeto ainda sem geracao recebe um gradiente derivado do proprio id — estavel, entao o mesmo
+projeto tem sempre a mesma cor e a lista continua reconhecivel de relance desde o primeiro
+dia.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

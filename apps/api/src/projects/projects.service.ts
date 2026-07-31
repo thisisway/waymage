@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { AssetKind, AssetStatus } from '@waymage/database';
 import { AppError } from '../common/app-error';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../infra/prisma.service';
+import { AppStorageService } from '../infra/storage.service';
 import type { CreateProjectInput, UpdateProjectInput } from './projects.schemas';
 import type { RequestPrincipal } from '../auth/request-user';
 
@@ -11,6 +13,8 @@ export interface ProjectView {
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Última imagem gerada no projeto. É a capa do cartão na lista. */
+  previewUrl: string | null;
 }
 
 const projectSelect = {
@@ -35,14 +39,60 @@ export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: AppStorageService,
   ) {}
 
   async list(principal: RequestPrincipal): Promise<ProjectView[]> {
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       where: { workspaceId: principal.workspaceId, deletedAt: null },
       orderBy: { updatedAt: 'desc' },
       select: projectSelect,
     });
+
+    return this.withPreviews(principal.workspaceId, projects);
+  }
+
+  /**
+   * Anexa a capa de cada projeto.
+   *
+   * Uma consulta só para todos os projetos, e não uma por projeto: a lista é a primeira tela
+   * depois do login e N+1 aqui apareceria como lentidão logo na entrada.
+   */
+  private async withPreviews(
+    workspaceId: string,
+    projects: Omit<ProjectView, 'previewUrl'>[],
+  ): Promise<ProjectView[]> {
+    if (projects.length === 0) return [];
+
+    const assets = await this.prisma.asset.findMany({
+      where: {
+        workspaceId,
+        projectId: { in: projects.map((project) => project.id) },
+        kind: AssetKind.GENERATED,
+        status: AssetStatus.READY,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { projectId: true, storageKey: true },
+    });
+
+    // Ordenado por data desc: o primeiro de cada projeto é o mais recente.
+    const latest = new Map<string, string>();
+    for (const asset of assets) {
+      if (asset.projectId && !latest.has(asset.projectId)) {
+        latest.set(asset.projectId, asset.storageKey);
+      }
+    }
+
+    return Promise.all(
+      projects.map(async (project) => {
+        const key = latest.get(project.id);
+        return {
+          ...project,
+          previewUrl: key ? await this.storage.signedReadUrl(key) : null,
+        };
+      }),
+    );
   }
 
   async get(principal: RequestPrincipal, projectId: string): Promise<ProjectView> {
@@ -51,7 +101,9 @@ export class ProjectsService {
       select: projectSelect,
     });
     if (!project) throw AppError.notFound('Projeto');
-    return project;
+
+    const [withPreview] = await this.withPreviews(principal.workspaceId, [project]);
+    return withPreview as ProjectView;
   }
 
   async create(
@@ -77,7 +129,7 @@ export class ProjectsService {
       ...(requestId ? { requestId } : {}),
     });
 
-    return project;
+    return { ...project, previewUrl: null };
   }
 
   async update(
@@ -109,7 +161,7 @@ export class ProjectsService {
       ...(requestId ? { requestId } : {}),
     });
 
-    return project;
+    return { ...project, previewUrl: null };
   }
 
   /** Soft delete: cenas, assets e gerações continuam referenciáveis para auditoria. */

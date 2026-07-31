@@ -113,6 +113,8 @@ export interface Project {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Última imagem gerada no projeto, em URL assinada. Serve de capa na lista. */
+  previewUrl: string | null;
 }
 
 export interface ValidationIssue {
