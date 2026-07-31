@@ -54,21 +54,25 @@ export default function ProjectsPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-surface-border bg-surface-raised px-6 py-3">
-        <span className="text-sm font-semibold tracking-tight">Waymage</span>
-        <div className="flex items-center gap-4 text-xs text-ink-secondary">
-          <a href="/billing" className="hover:text-ink-primary">
+      <header className="flex items-center justify-between border-b border-surface-border bg-surface-raised px-6 py-3.5">
+        <span className="text-h3 text-ink-primary">Waymage</span>
+        <div className="flex items-center gap-5 text-micro text-ink-secondary">
+          <a href="/billing" className="font-semibold transition-colors hover:text-accent-40">
             créditos
           </a>
-          <span>{session.data.user.email}</span>
-          <button type="button" onClick={handleLogout} className="hover:text-ink-primary">
+          <span className="text-ink-muted">{session.data.user.email}</span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="font-semibold transition-colors hover:text-ink-primary"
+          >
             Sair
           </button>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-base font-medium">Projetos</h1>
+        <h1 className="text-h2 text-ink-primary">Projetos</h1>
 
         <form onSubmit={handleCreate} className="mt-4 flex gap-2">
           <input
@@ -78,12 +82,12 @@ export default function ProjectsPage() {
             maxLength={160}
             placeholder="Nome do novo projeto"
             aria-label="Nome do novo projeto"
-            className="flex-1 rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm placeholder:text-ink-muted"
+            className="flex-1 rounded-md border border-surface-border bg-surface-overlay px-3 py-2.5 text-[14px] text-ink-primary transition-all duration-fast ease-out placeholder:text-ink-muted hover:border-surface-hover focus:border-accent focus:outline-none"
           />
           <button
             type="submit"
             disabled={createProject.isPending}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-surface-base disabled:opacity-50"
+            className="rounded-md bg-accent px-5 py-2.5 text-[14px] font-bold text-white shadow-glow-sm transition-all duration-fast ease-out hover:bg-accent-80 hover:shadow-glow active:scale-[0.98] disabled:opacity-50"
           >
             {createProject.isPending ? 'Criando…' : 'Criar'}
           </button>
@@ -94,20 +98,36 @@ export default function ProjectsPage() {
             Nenhum projeto ainda. Crie o primeiro acima.
           </p>
         ) : (
-          <ul className="mt-6 space-y-2">
+          <ul className="stagger mt-6 grid gap-3 sm:grid-cols-2">
             {projects.data.map((project) => (
               <li key={project.id}>
                 <a
                   href={`/projects/${project.id}`}
-                  className="block rounded-md border border-surface-border bg-surface-raised px-4 py-3 hover:border-ink-muted"
+                  className="group block h-full rounded-lg border border-surface-border bg-surface-raised p-4 transition-all duration-fast ease-out hover:-translate-y-0.5 hover:border-accent-40/60 hover:shadow-lg"
                 >
-                  <div className="text-sm text-ink-primary">{project.name}</div>
-                  {project.description && (
-                    <div className="mt-0.5 text-xs text-ink-secondary">{project.description}</div>
-                  )}
-                  <div className="mt-1 text-xs text-ink-muted">
-                    atualizado em {new Date(project.updatedAt).toLocaleDateString('pt-BR')}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[15px] font-bold text-ink-primary">{project.name}</span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4 shrink-0 text-ink-muted opacity-0 transition-all duration-fast ease-out group-hover:translate-x-0.5 group-hover:text-accent-40 group-hover:opacity-100"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
                   </div>
+                  {project.description && (
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">
+                      {project.description}
+                    </p>
+                  )}
+                  <p className="mt-3 text-micro text-ink-muted">
+                    atualizado em {new Date(project.updatedAt).toLocaleDateString('pt-BR')}
+                  </p>
                 </a>
               </li>
             ))}

@@ -748,6 +748,57 @@ existe logo acima.
 
 ---
 
+## D-044 — Way Cloud Design System como base visual
+
+**Status:** aceita · substitui a identidade improvisada das Fases 1 a 7
+
+O produto pertence a uma familia de produtos Way Cloud, e ter identidade propria por
+aplicacao fragmenta a marca. O DS v1.0 passa a ser a fonte: `#1D66FF` (Way Blue) como
+primaria, `#0B1023` (Way Dark) como fundo, Plus Jakarta Sans, escala tipografica, raios
+(6/8/12/16/999) e sombras — incluindo o "glow" azul, reservado ao que esta ativo ou em foco.
+
+**O que o DS nao especifica e precisou ser derivado:**
+
+1. **Superficies intermediarias do modo escuro.** O DS define so `#0B1023`. Uma interface de
+   editor precisa de niveis de elevacao, entao a rampa (`#10162E` → `#161D3B` → `#1D2649` →
+   borda `#232C52`) foi derivada preservando o matiz azulado, para que todos os niveis
+   pertencam a mesma familia em vez de virarem cinza.
+
+2. **Movimento.** Duracoes e curvas nao estao documentadas. Foram definidas como token —
+   `--ease-out` (expo, sensacao de resposta imediata), `--ease-spring` (leve ultrapassagem,
+   so em selecao) e quatro duracoes — e nao soltas em cada componente: animacao inconsistente
+   e o que faz uma interface parecer barata.
+
+A fonte entra por `next/font` e nao por `<link>` para o Google: os arquivos sao servidos do
+nosso dominio, o que elimina requisicao a terceiro, evita o salto de layout da troca de fonte
+e mantem a CSP fechada.
+
+`prefers-reduced-motion` desliga todas as transicoes. Nao e opcional — animacao causa enjoo e
+desorientacao em pessoas com sensibilidade vestibular, e o estado final continua o mesmo.
+
+---
+
+## D-045 — Movimento responde perguntas, nao decora
+
+**Status:** aceita
+
+Cada animacao da interface existe para responder algo especifico:
+
+| Movimento                                      | Pergunta que responde              |
+| ---------------------------------------------- | ---------------------------------- |
+| Indicador do segmentado desliza entre posicoes | "de onde para onde a selecao foi?" |
+| Cartao sobe 1px e ganha sombra no hover        | "isso e clicavel?"                 |
+| Opcao recua 3% no clique                       | "meu clique registrou?"            |
+| Resultados entram em cascata de 60ms           | "em que ordem devo ler isto?"      |
+| Contorno do botao Gerar pulsa                  | "ainda esta trabalhando?"          |
+| Silhueta da previa desliza ao mudar a posicao  | "o que esse controle faz?"         |
+| Shimmer no lugar do resultado                  | "isto vai ser preenchido"          |
+
+O que nao respondia nada foi cortado. O criterio para acrescentar movimento novo e o mesmo:
+se nao houver pergunta, nao ha animacao.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

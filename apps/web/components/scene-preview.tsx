@@ -53,17 +53,17 @@ export function ScenePreview({ spec }: { spec: SceneSpec }) {
   return (
     <figure className="w-full max-w-md">
       <div
-        className="relative mx-auto overflow-hidden rounded-xl border border-surface-border bg-surface-raised transition-all duration-300"
+        className="relative mx-auto overflow-hidden rounded-xl border border-surface-border bg-surface-raised shadow-lg transition-all duration-slow ease-out"
         style={{ aspectRatio: `${aspect}`, maxHeight: '46vh' }}
       >
         {/* Fundo derivado da paleta: dá noção da direção de cor sem fingir ser o resultado. */}
         <div
-          className="absolute inset-0 transition-all duration-500"
+          className="absolute inset-0 transition-all duration-slow ease-out"
           style={{
             background:
               palette.length > 0
                 ? `linear-gradient(140deg, ${[...palette, palette[0]].join(', ')})`
-                : 'linear-gradient(140deg,#1c1f27,#15171d)',
+                : 'linear-gradient(140deg,#161D3B,#10162E)',
             opacity: 0.35,
           }}
         />
@@ -86,7 +86,7 @@ export function ScenePreview({ spec }: { spec: SceneSpec }) {
 
         <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden>
           <g
-            className="fill-ink-secondary transition-transform duration-500 ease-out"
+            className="fill-ink-secondary transition-transform duration-slow ease-out"
             style={{
               transform: `translate(${cx - 50}px, ${y}px) scale(${scale})`,
               transformOrigin: '50px 50px',
@@ -100,7 +100,7 @@ export function ScenePreview({ spec }: { spec: SceneSpec }) {
           </g>
 
           {textArea && (
-            <g className="transition-all duration-300">
+            <g className="transition-all duration-base ease-out">
               <rect
                 {...{ x: textArea.x, y: textArea.y, width: textArea.w, height: textArea.h }}
                 rx="2"

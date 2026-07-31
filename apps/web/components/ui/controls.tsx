@@ -3,18 +3,22 @@
 import { useState, type ReactNode } from 'react';
 
 /**
- * Controles do editor.
+ * Controles do editor, no vocabulário do Way Cloud Design System.
  *
- * O princípio: **mostrar em vez de descrever**. Um `<select>` com "waist_up" obriga a pessoa
- * a saber o que isso significa; um diagrama do enquadramento dispensa a explicação. Onde a
- * opção tem forma visual, ela aparece — texto é o último recurso, não o primeiro.
+ * Dois princípios governam tudo aqui:
+ *
+ * 1. **Mostrar em vez de descrever.** Um `<select>` com "waist_up" obriga a pessoa a saber o
+ *    que isso significa; um diagrama do enquadramento dispensa a explicação.
+ * 2. **Movimento que informa.** Cada transição existe para responder uma pergunta — "o que
+ *    mudou?", "isso é clicável?", "meu clique registrou?". Animação que não responde nada
+ *    sai.
  */
 
 /**
  * Cartão colapsável de seção.
  *
- * O subtítulo mostra o valor atual com a seção fechada, o que é o ponto: dá para ler a cena
- * inteira rolando a coluna, sem abrir nada. Só o que está sendo mexido fica aberto.
+ * O subtítulo mostra o valor atual com a seção fechada: dá para ler a cena inteira rolando a
+ * coluna, sem abrir nada. Só o que está sendo mexido fica aberto.
  */
 export function SectionCard({
   icon,
@@ -32,42 +36,56 @@ export function SectionCard({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-surface-border bg-surface-raised transition-colors hover:border-surface-hover">
+    <section
+      className={`overflow-hidden rounded-lg border bg-surface-raised transition-all duration-fast ease-out ${
+        open
+          ? 'border-accent/30 shadow-sm'
+          : 'border-surface-border hover:border-surface-hover hover:shadow-xs'
+      }`}
+    >
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
+        className="group flex w-full items-center gap-3 px-4 py-3 text-left"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-overlay text-accent">
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-all duration-fast ease-out ${
+            open
+              ? 'bg-accent text-white shadow-glow-sm'
+              : 'bg-surface-overlay text-accent-40 group-hover:bg-surface-hover'
+          }`}
+        >
           {icon}
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-ink-primary">{title}</span>
-          <span className="mt-0.5 block truncate text-xs text-ink-muted">{summary}</span>
+          <span className="block text-[13px] font-bold leading-tight text-ink-primary">
+            {title}
+          </span>
+          <span className="mt-0.5 block truncate text-micro text-ink-muted">{summary}</span>
         </span>
 
         <svg
           aria-hidden
           viewBox="0 0 24 24"
-          className={`h-4 w-4 shrink-0 text-ink-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 transition-all duration-fast ease-out ${
+            open ? 'rotate-180 text-accent' : 'text-ink-muted group-hover:text-ink-secondary'
+          }`}
           fill="none"
           stroke="currentColor"
-          strokeWidth={2}
+          strokeWidth={2.2}
         >
           <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
 
-      {/* Grid de 0fr→1fr anima altura sem precisar medir o conteúdo em JavaScript. */}
+      {/* Grid 0fr→1fr anima a altura sem precisar medir o conteúdo em JavaScript. */}
       <div
-        className={`grid transition-all duration-200 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        className={`grid transition-all duration-base ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       >
         <div className="overflow-hidden">
-          <div className="space-y-4 border-t border-surface-border px-3.5 pb-4 pt-3.5">
-            {children}
-          </div>
+          <div className="space-y-5 border-t border-surface-border px-4 pb-5 pt-4">{children}</div>
         </div>
       </div>
     </section>
@@ -85,16 +103,19 @@ export function Field({
 }) {
   return (
     <div>
-      <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-ink-muted">
-        {label}
-      </span>
+      <span className="mb-2 block text-label uppercase text-ink-muted">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs leading-relaxed text-ink-muted">{hint}</span>}
+      {hint && <span className="mt-2 block text-micro leading-relaxed text-ink-muted">{hint}</span>}
     </div>
   );
 }
 
-/** Botões lado a lado. Para 2–4 opções curtas, onde um dropdown esconderia as alternativas. */
+/**
+ * Botões lado a lado, para 2–5 opções curtas.
+ *
+ * O indicador ativo desliza entre as posições em vez de piscar no destino: o olho acompanha
+ * o movimento e entende de onde para onde a seleção foi.
+ */
 export function Segmented<T extends string>({
   label,
   value,
@@ -108,9 +129,23 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
   hint?: string;
 }) {
+  const index = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+
   return (
     <Field label={label} hint={hint}>
-      <div className="flex gap-1 rounded-lg bg-surface-overlay p-1">
+      <div className="relative flex rounded-md bg-surface-overlay p-1">
+        <span
+          aria-hidden
+          className="absolute inset-y-1 rounded-sm bg-accent shadow-glow-sm transition-all duration-fast ease-spring"
+          style={{
+            width: `calc((100% - 8px) / ${options.length})`,
+            left: `calc(4px + (100% - 8px) * ${index} / ${options.length})`,
+          }}
+        />
+
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -119,15 +154,13 @@ export function Segmented<T extends string>({
               type="button"
               onClick={() => onChange(option.value)}
               aria-pressed={active}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-all ${
-                active
-                  ? 'bg-accent text-surface-base shadow-sm'
-                  : 'text-ink-secondary hover:bg-surface-hover hover:text-ink-primary'
+              className={`relative z-10 flex-1 rounded-sm px-2 py-1.5 text-micro font-semibold transition-colors duration-fast ${
+                active ? 'text-white' : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >
               {option.label}
               {option.badge && (
-                <span className={`ml-1 text-[10px] ${active ? 'opacity-70' : 'text-ink-muted'}`}>
+                <span className={`ml-1 font-mono ${active ? 'opacity-70' : 'text-ink-muted'}`}>
                   {option.badge}
                 </span>
               )}
@@ -140,10 +173,10 @@ export function Segmented<T extends string>({
 }
 
 /**
- * Grade de opções com pré-visualização.
+ * Grade de opções com pré-visualização — o controle central do editor.
  *
- * É o controle central do editor: cada opção mostra o que faz, em vez de nomeá-la. A legenda
- * fica abaixo do desenho porque o desenho é o que se lê primeiro.
+ * Cada opção mostra o que faz em vez de nomeá-la. A borda azul e o leve recuo no clique
+ * confirmam a escolha sem precisar de texto de estado.
  */
 export function OptionGrid<T extends string>({
   label,
@@ -174,16 +207,16 @@ export function OptionGrid<T extends string>({
               onClick={() => onChange(option.value)}
               aria-pressed={active}
               title={option.caption ?? option.label}
-              className={`group rounded-lg border p-2 transition-all ${
+              className={`group rounded-md border p-2 transition-all duration-fast ease-out active:scale-[0.97] ${
                 active
-                  ? 'border-accent bg-accent/10'
-                  : 'border-surface-border bg-surface-overlay hover:border-ink-muted'
+                  ? 'border-accent bg-accent/[0.12] shadow-glow-sm'
+                  : 'border-surface-border bg-surface-overlay hover:-translate-y-px hover:border-accent-40/50 hover:shadow-sm'
               }`}
             >
               <span className="flex h-11 items-center justify-center">{option.preview}</span>
               <span
-                className={`mt-1.5 block truncate text-[11px] leading-tight ${
-                  active ? 'text-ink-primary' : 'text-ink-secondary group-hover:text-ink-primary'
+                className={`mt-2 block truncate text-micro font-medium leading-tight transition-colors ${
+                  active ? 'text-accent-40' : 'text-ink-secondary group-hover:text-ink-primary'
                 }`}
               >
                 {option.label}
@@ -208,11 +241,13 @@ export function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex items-start justify-between gap-4">
       <span className="min-w-0">
-        <span className="block text-sm text-ink-secondary">{label}</span>
+        <span className="block text-[13px] font-medium text-ink-secondary">{label}</span>
         {description && (
-          <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">{description}</span>
+          <span className="mt-1 block text-micro leading-relaxed text-ink-muted">
+            {description}
+          </span>
         )}
       </span>
 
@@ -222,13 +257,13 @@ export function Toggle({
         aria-checked={value}
         aria-label={label}
         onClick={() => onChange(!value)}
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-          value ? 'bg-accent' : 'bg-surface-overlay'
+        className={`relative h-6 w-11 shrink-0 rounded-pill transition-all duration-fast ease-out ${
+          value ? 'bg-accent shadow-glow-sm' : 'bg-surface-overlay hover:bg-surface-hover'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-ink-primary transition-transform ${
-            value ? 'translate-x-4' : 'translate-x-0.5'
+          className={`absolute top-1 h-4 w-4 rounded-pill bg-white shadow-sm transition-transform duration-fast ease-spring ${
+            value ? 'translate-x-6' : 'translate-x-1'
           }`}
         />
       </button>
@@ -236,7 +271,7 @@ export function Toggle({
   );
 }
 
-/** Slider 0..1 com marcas de referência, para o número não ser um valor abstrato. */
+/** Slider 0..1 com marcas nomeadas, para o número não ser um valor abstrato. */
 export function Slider({
   label,
   value,
@@ -253,22 +288,34 @@ export function Slider({
   return (
     <Field label={label} hint={hint}>
       <div className="flex items-center gap-3">
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={value}
-          aria-label={label}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-surface-overlay accent-accent"
-        />
-        <span className="w-8 text-right font-mono text-xs text-ink-secondary">
+        <span className="relative flex-1">
+          {/* Trilha preenchida: mostra a proporção, não só a posição do botão. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-pill bg-surface-overlay"
+          >
+            <span
+              className="block h-full rounded-pill bg-accent transition-all duration-instant ease-out"
+              style={{ width: `${value * 100}%` }}
+            />
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={value}
+            aria-label={label}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="relative h-6 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-pill [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-accent [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:transition-transform hover:[&::-webkit-slider-thumb]:scale-110"
+          />
+        </span>
+        <span className="w-9 text-right font-mono text-code text-ink-secondary">
           {Math.round(value * 100)}
         </span>
       </div>
       {marks && (
-        <div className="mt-1 flex justify-between text-[10px] text-ink-muted">
+        <div className="mt-1 flex justify-between text-micro text-ink-muted">
           <span>{marks[0]}</span>
           <span>{marks[1]}</span>
         </div>
@@ -276,6 +323,9 @@ export function Slider({
     </Field>
   );
 }
+
+const INPUT_CLASS =
+  'w-full rounded-md border border-surface-border bg-surface-overlay px-3 py-2.5 text-[14px] text-ink-primary transition-all duration-fast ease-out placeholder:text-ink-muted hover:border-surface-hover focus:border-accent focus:bg-surface-hover focus:outline-none';
 
 export function TextInput({
   label,
@@ -292,9 +342,6 @@ export function TextInput({
   multiline?: boolean;
   hint?: string;
 }) {
-  const className =
-    'w-full rounded-lg border border-surface-border bg-surface-overlay px-3 py-2 text-sm text-ink-primary transition-colors placeholder:text-ink-muted hover:border-ink-muted focus:border-accent';
-
   return (
     <Field label={label} hint={hint}>
       {multiline ? (
@@ -303,7 +350,7 @@ export function TextInput({
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className={`${className} resize-none leading-relaxed`}
+          className={`${INPUT_CLASS} resize-none leading-relaxed`}
         />
       ) : (
         <input
@@ -311,7 +358,7 @@ export function TextInput({
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className={className}
+          className={INPUT_CLASS}
         />
       )}
     </Field>
@@ -346,14 +393,14 @@ export function ChipList({
           {value.map((item) => (
             <span
               key={item}
-              className="flex items-center gap-1 rounded-md bg-surface-overlay px-2 py-1 text-xs text-ink-secondary"
+              className="animate-rise flex items-center gap-1.5 rounded-pill border border-accent/20 bg-accent/10 py-1 pl-3 pr-2 text-micro font-medium text-accent-40"
             >
               {item}
               <button
                 type="button"
                 onClick={() => onChange(value.filter((current) => current !== item))}
                 aria-label={`Remover ${item}`}
-                className="text-ink-muted transition-colors hover:text-state-error"
+                className="text-accent-40/60 transition-colors hover:text-state-error"
               >
                 ×
               </button>
@@ -375,7 +422,7 @@ export function ChipList({
           }
         }}
         onBlur={add}
-        className="w-full rounded-lg border border-surface-border bg-surface-overlay px-3 py-2 text-sm text-ink-primary transition-colors placeholder:text-ink-muted hover:border-ink-muted focus:border-accent"
+        className={INPUT_CLASS}
       />
     </Field>
   );
@@ -400,13 +447,13 @@ export function PaletteEditor({
               onChange={(e) =>
                 onChange(value.map((c, i) => (i === index ? e.target.value.toUpperCase() : c)))
               }
-              className="h-9 w-9 cursor-pointer rounded-lg border border-surface-border bg-transparent transition-transform hover:scale-105"
+              className="h-10 w-10 cursor-pointer rounded-md border-2 border-surface-border bg-transparent transition-all duration-fast ease-spring hover:scale-110 hover:border-accent-40"
             />
             <button
               type="button"
               aria-label={`Remover cor ${index + 1}`}
               onClick={() => onChange(value.filter((_, i) => i !== index))}
-              className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-state-error text-[10px] text-surface-base group-hover:flex"
+              className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-pill bg-state-error text-micro text-white shadow-sm group-hover:flex"
             >
               ×
             </button>
@@ -416,14 +463,50 @@ export function PaletteEditor({
         {value.length < 8 && (
           <button
             type="button"
-            onClick={() => onChange([...value, '#888888'])}
+            onClick={() => onChange([...value, '#1D66FF'])}
             aria-label="Adicionar cor"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-surface-border text-ink-muted transition-colors hover:border-accent hover:text-accent"
+            className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-dashed border-surface-border text-ink-muted transition-all duration-fast ease-out hover:border-accent hover:text-accent"
           >
             +
           </button>
         )}
       </div>
     </Field>
+  );
+}
+
+/** Botão primário do DS. Usado no que compromete crédito ou cria algo. */
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  children,
+  ...props
+}: {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const variants = {
+    primary:
+      'bg-accent text-white shadow-glow-sm hover:bg-accent-80 hover:shadow-glow disabled:shadow-none',
+    secondary:
+      'border border-surface-border bg-surface-overlay text-ink-secondary hover:border-accent-40/50 hover:text-ink-primary',
+    ghost: 'text-ink-secondary hover:bg-surface-overlay hover:text-ink-primary',
+    danger: 'bg-state-error text-white hover:opacity-90',
+  };
+
+  const sizes = {
+    sm: 'px-3 py-1.5 text-micro',
+    md: 'px-4 py-2 text-[13px]',
+    lg: 'px-6 py-3 text-[15px]',
+  };
+
+  return (
+    <button
+      type="button"
+      {...props}
+      className={`rounded-md font-semibold transition-all duration-fast ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${variants[variant]} ${sizes[size]} ${props.className ?? ''}`}
+    >
+      {children}
+    </button>
   );
 }

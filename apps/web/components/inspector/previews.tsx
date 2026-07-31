@@ -175,13 +175,14 @@ export function LightingPreview({
   }[lighting.temperature];
 
   // Preenchimento define o quanto a sombra fecha.
-  const shadow = { none: '#0a0b0e', subtle: '#15171d', balanced: '#252831', strong: '#3a3e4a' }[
+  // Sombras na família da Way Dark: a esfera precisa pertencer à mesma paleta da interface.
+  const shadow = { none: '#0B1023', subtle: '#10162E', balanced: '#1D2649', strong: '#2E3A66' }[
     lighting.fill
   ];
 
   return (
     <span
-      className="block h-full w-full rounded-full"
+      className="block h-full w-full rounded-pill transition-all duration-slow ease-out"
       style={{
         background: `radial-gradient(circle at ${origin}, ${tint} 0%, ${tint} ${spread}, ${shadow} 100%)`,
       }}
@@ -315,7 +316,7 @@ export function TimePreview({ time }: { time: string }) {
   return (
     <span
       className="block h-9 w-full rounded-md border border-surface-border"
-      style={{ background: sky[time] ?? 'var(--tw-color-surface-overlay)' }}
+      style={{ background: sky[time] ?? '#161D3B' }}
       aria-hidden
     />
   );

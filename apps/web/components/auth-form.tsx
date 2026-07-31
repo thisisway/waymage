@@ -45,11 +45,20 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <h1 className="text-lg font-semibold tracking-tight">Waymage</h1>
-        <p className="mt-1 text-sm text-ink-secondary">
-          {isRegister ? 'Crie sua conta e seu workspace.' : 'Entre para continuar.'}
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+      {/* Halo azul do DS: dá profundidade ao fundo sem competir com o formulário. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-0 h-[36rem] w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-pill opacity-20 blur-3xl"
+        style={{ background: 'radial-gradient(circle, #1D66FF 0%, transparent 70%)' }}
+      />
+
+      <div className="animate-rise relative w-full max-w-sm rounded-xl border border-surface-border bg-surface-raised p-8 shadow-lg">
+        <h1 className="text-h2 text-ink-primary">Waymage</h1>
+        <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
+          {isRegister
+            ? 'Crie sua conta e comece com 100 créditos.'
+            : 'Entre para continuar de onde parou.'}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -73,7 +82,10 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
           {error && (
             // role="alert" para que leitores de tela anunciem o erro sem o usuário procurar.
-            <p role="alert" className="text-sm text-state-error">
+            <p
+              role="alert"
+              className="animate-rise rounded-md border border-state-error/30 bg-state-error/10 px-3 py-2.5 text-[13px] leading-relaxed text-state-error"
+            >
               {error}
             </p>
           )}
@@ -81,15 +93,18 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-surface-base transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-[14px] font-bold text-white shadow-glow-sm transition-all duration-fast ease-out hover:bg-accent-80 hover:shadow-glow active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
           >
             {pending ? 'Aguarde…' : isRegister ? 'Criar conta' : 'Entrar'}
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-ink-muted">
+        <p className="mt-6 text-[13px] text-ink-muted">
           {isRegister ? 'Já tem conta? ' : 'Ainda não tem conta? '}
-          <a href={isRegister ? '/login' : '/register'} className="text-accent hover:underline">
+          <a
+            href={isRegister ? '/login' : '/register'}
+            className="font-semibold text-accent-40 transition-colors hover:text-accent"
+          >
             {isRegister ? 'Entrar' : 'Criar conta'}
           </a>
         </p>
@@ -105,12 +120,12 @@ function Field({
 }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-medium text-ink-secondary">{label}</span>
+      <span className="mb-2 block text-label uppercase text-ink-muted">{label}</span>
       <input
         {...props}
-        className="w-full rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted"
+        className="w-full rounded-md border border-surface-border bg-surface-overlay px-3 py-2.5 text-[14px] text-ink-primary transition-all duration-fast ease-out placeholder:text-ink-muted hover:border-surface-hover focus:border-accent focus:bg-surface-hover focus:outline-none"
       />
-      {hint && <span className="mt-1.5 block text-xs text-ink-muted">{hint}</span>}
+      {hint && <span className="mt-2 block text-micro leading-relaxed text-ink-muted">{hint}</span>}
     </label>
   );
 }

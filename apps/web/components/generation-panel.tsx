@@ -16,25 +16,29 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
   const { credits, estimatedSeconds, provider, summary, warnings, canGenerate } = estimate.data;
 
   return (
-    <div className="mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-raised p-3">
-      <p className="text-xs leading-relaxed text-ink-secondary">{summary}</p>
+    <div className="animate-rise mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-raised p-4 shadow-sm">
+      <p className="text-[13px] leading-relaxed text-ink-secondary">{summary}</p>
 
-      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
-        <span>
-          provedor <span className="font-mono text-ink-secondary">{provider}</span>
-        </span>
-        <span>
-          custo estimado <span className="font-mono text-ink-secondary">{credits} créditos</span>
-        </span>
-        <span>
-          tempo <span className="font-mono text-ink-secondary">~{estimatedSeconds}s</span>
-        </span>
+      <dl className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          ['provedor', provider],
+          ['custo', `${credits} créditos`],
+          ['tempo', `~${estimatedSeconds}s`],
+        ].map(([term, value]) => (
+          <div key={term} className="rounded-md bg-surface-overlay px-3 py-2">
+            <dt className="text-micro uppercase tracking-wide text-ink-muted">{term}</dt>
+            <dd className="mt-0.5 font-mono text-code font-semibold text-ink-primary">{value}</dd>
+          </div>
+        ))}
       </dl>
 
       {warnings.length > 0 && (
         <ul className="mt-2 space-y-1">
           {warnings.map((warning) => (
-            <li key={warning.code} className="text-xs text-state-warn">
+            <li
+              key={warning.code}
+              className="rounded-md border border-state-warn/30 bg-state-warn/10 px-3 py-2 text-micro leading-relaxed text-state-warn"
+            >
               {warning.message}
             </li>
           ))}
@@ -42,7 +46,9 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
       )}
 
       {!canGenerate && (
-        <p className="mt-2 text-xs text-state-error">Resolva os erros da cena antes de gerar.</p>
+        <p className="mt-3 rounded-md border border-state-error/30 bg-state-error/10 px-3 py-2 text-micro text-state-error">
+          Resolva os erros da cena antes de gerar.
+        </p>
       )}
     </div>
   );
@@ -58,7 +64,12 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
   return (
     <div className="mx-auto w-full max-w-2xl">
       <div className="flex items-center justify-between text-xs">
-        <span className={failed ? 'text-state-error' : 'text-ink-secondary'}>
+        <span
+          className={`flex items-center gap-2 font-medium ${failed ? 'text-state-error' : 'text-ink-secondary'}`}
+        >
+          {!failed && progress < 1 && (
+            <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-pill bg-accent" />
+          )}
           {statusLabel}
           {message ? ` — ${message}` : ''}
         </span>
@@ -79,10 +90,12 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label="Progresso da geração"
-        className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-overlay"
+        className="mt-2 h-1.5 overflow-hidden rounded-pill bg-surface-overlay"
       >
         <div
-          className={`h-full transition-all duration-300 ${failed ? 'bg-state-error' : 'bg-accent'}`}
+          className={`h-full rounded-pill transition-all duration-base ease-out ${
+            failed ? 'bg-state-error' : 'bg-accent shadow-glow-sm'
+          }`}
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>
@@ -124,11 +137,11 @@ export function ResultsGrid({
 
   if (results.length === 0) {
     return (
-      <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
+      <div className="grid w-full max-w-2xl grid-cols-2 gap-4">
         {Array.from({ length: placeholders }, (_, index) => (
           <div
             key={index}
-            className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-surface-border bg-surface-raised text-xs text-ink-muted"
+            className="shimmer flex aspect-video items-center justify-center rounded-lg border border-surface-border text-micro text-ink-muted"
           >
             rascunho {index + 1}
           </div>
@@ -138,7 +151,7 @@ export function ResultsGrid({
   }
 
   return (
-    <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
+    <div className="stagger grid w-full max-w-2xl grid-cols-2 gap-4">
       {results.map((result, index) => (
         <ResultCard
           key={result.id}
@@ -175,8 +188,10 @@ function ResultCard({
         type="button"
         onClick={onSelect}
         aria-pressed={result.selected}
-        className={`block w-full overflow-hidden rounded-lg border transition-colors ${
-          result.selected ? 'border-accent' : 'border-surface-border hover:border-ink-muted'
+        className={`block w-full overflow-hidden rounded-lg border transition-all duration-fast ease-out ${
+          result.selected
+            ? 'border-accent shadow-glow'
+            : 'border-surface-border hover:-translate-y-0.5 hover:border-accent-40/60 hover:shadow-lg'
         }`}
       >
         {result.url ? (
@@ -197,7 +212,11 @@ function ResultCard({
       <figcaption className="flex items-center justify-between text-xs text-ink-muted">
         <span>
           {result.width}×{result.height}
-          {result.selected && <span className="ml-1.5 text-accent">selecionado</span>}
+          {result.selected && (
+            <span className="ml-2 rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              escolhido
+            </span>
+          )}
         </span>
         {result.evaluation && (
           <span

@@ -13,6 +13,7 @@ import { ResultCompare } from '../../../components/result-compare';
 import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
 import { CreditBadge } from '../../../components/credit-badge';
+import { Button } from '../../../components/ui/controls';
 import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
@@ -197,19 +198,31 @@ function TopBar({
   indicator: React.ReactNode;
 }) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-surface-border bg-surface-raised px-5 py-2.5">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="flex items-center justify-between gap-4 border-b border-surface-border bg-surface-raised px-5 py-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <a
           href={`/projects/${scene.projectId}`}
-          className="text-xs text-ink-muted hover:text-ink-secondary"
+          aria-label="Voltar ao projeto"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-all duration-fast ease-out hover:bg-surface-overlay hover:text-ink-primary"
         >
-          ← projeto
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
         </a>
         <input
           value={scene.name}
           aria-label="Nome da cena"
           onChange={(e) => onRename(e.target.value)}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-ink-primary hover:border-surface-border focus:border-surface-border"
+          className="min-w-0 max-w-xs flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[15px] font-bold text-ink-primary transition-all duration-fast ease-out hover:bg-surface-overlay focus:border-accent focus:bg-surface-overlay focus:outline-none"
         />
         {indicator}
       </div>
@@ -217,41 +230,76 @@ function TopBar({
       <div className="flex items-center gap-3 text-xs">
         <CreditBadge />
         <ModeSelector />
-        <button
-          type="button"
-          onClick={onSnapshot}
-          disabled={snapshotting}
-          className="rounded-md border border-surface-border px-3 py-1.5 text-ink-secondary hover:text-ink-primary disabled:opacity-50"
-        >
+        <Button variant="secondary" size="sm" onClick={onSnapshot} disabled={snapshotting}>
           {snapshotting ? 'Salvando…' : 'Criar versão'}
-        </button>
-        <button
-          type="button"
+        </Button>
+
+        <Button
+          variant="primary"
+          size="md"
           onClick={onGenerate}
           disabled={blocked || generating}
           title={blocked ? 'Resolva os erros da cena antes de gerar' : undefined}
-          className="rounded-md bg-accent px-3 py-1.5 font-medium text-surface-base disabled:cursor-not-allowed disabled:opacity-40"
+          className={generating ? 'pulse-glow' : ''}
         >
-          {generating ? 'Gerando…' : 'Gerar'}
-        </button>
+          {generating ? (
+            <span className="flex items-center gap-2">
+              <Spinner />
+              Gerando…
+            </span>
+          ) : (
+            'Gerar'
+          )}
+        </Button>
       </div>
     </header>
   );
 }
 
+/** Indicador de atividade. Um anel girando diz "estou trabalhando" sem ocupar espaço. */
+function Spinner() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 animate-spin" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function ModeSelector() {
   const { mode, setMode } = useEditorStore();
+  const modes = [
+    { value: 'quick', label: 'Rápido' },
+    { value: 'guided', label: 'Guiado' },
+    { value: 'pro', label: 'Pro' },
+  ] as const;
+  const index = modes.findIndex((m) => m.value === mode);
+
   return (
-    <select
-      value={mode}
+    <div
+      className="relative flex rounded-md bg-surface-overlay p-1"
+      role="group"
       aria-label="Modo de edição"
-      onChange={(e) => setMode(e.target.value as 'quick' | 'guided' | 'pro')}
-      className="rounded-md border border-surface-border bg-surface-overlay px-2 py-1.5 text-xs text-ink-secondary"
     >
-      <option value="quick">Rápido</option>
-      <option value="guided">Guiado</option>
-      <option value="pro">Profissional</option>
-    </select>
+      <span
+        aria-hidden
+        className="absolute inset-y-1 w-[calc((100%-8px)/3)] rounded-sm bg-surface-hover transition-all duration-fast ease-spring"
+        style={{ left: `calc(4px + (100% - 8px) * ${index} / 3)` }}
+      />
+      {modes.map((item) => (
+        <button
+          key={item.value}
+          type="button"
+          onClick={() => setMode(item.value)}
+          aria-pressed={mode === item.value}
+          className={`relative z-10 px-2.5 py-1 text-micro font-semibold transition-colors duration-fast ${
+            mode === item.value ? 'text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -343,8 +391,8 @@ function Timeline({
   current: string | null;
 }) {
   return (
-    <footer className="flex items-center gap-2 overflow-x-auto border-t border-surface-border bg-surface-raised px-5 py-2.5 text-xs">
-      <span className="shrink-0 text-ink-muted">Versões</span>
+    <footer className="flex items-center gap-3 overflow-x-auto border-t border-surface-border bg-surface-raised px-5 py-2.5 text-micro">
+      <span className="shrink-0 font-bold uppercase tracking-wide text-ink-muted">Versões</span>
       {versions.length === 0 ? (
         <span className="text-ink-muted">— nenhuma ainda. Crie uma antes de gerar.</span>
       ) : (
@@ -358,11 +406,11 @@ function Timeline({
               )}
               <span
                 title={version.changeSummary ?? undefined}
-                className={
+                className={`rounded-pill px-2.5 py-1 font-mono font-semibold transition-all duration-fast ease-out ${
                   version.id === current
-                    ? 'rounded bg-surface-overlay px-2 py-0.5 text-ink-primary'
-                    : 'px-2 py-0.5 text-ink-secondary'
-                }
+                    ? 'bg-accent text-white shadow-glow-sm'
+                    : 'bg-surface-overlay text-ink-secondary hover:bg-surface-hover hover:text-ink-primary'
+                }`}
               >
                 v{version.versionNumber}
               </span>

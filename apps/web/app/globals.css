@@ -2,17 +2,198 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Way Cloud Design System v1.0.
+ *
+ * As cores primárias, a escala tipográfica, os raios e as sombras vêm do DS. As superfícies
+ * intermediárias do modo escuro NÃO estão especificadas lá — o DS define apenas `#0B1023`
+ * como fundo — então a rampa abaixo foi derivada dele preservando o matiz azulado, para que
+ * os níveis de elevação pertençam à mesma família. Ver docs/DECISIONS.md D-044.
+ */
 @layer base {
+  :root {
+    /* ── Cores do DS ─────────────────────────────────────────────────────── */
+    --wc-blue: #1d66ff;
+    --wc-blue-10: #e8f0ff;
+    --wc-blue-20: #c2d5ff;
+    --wc-blue-40: #7fabff;
+    --wc-blue-80: #1349c0;
+    --wc-dark: #0b1023;
+
+    --wc-success: #17c86a;
+    --wc-warning: #ffb800;
+    --wc-error: #ff3b30;
+
+    /* ── Raios do DS ─────────────────────────────────────────────────────── */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    /* ── Sombras do DS ───────────────────────────────────────────────────── */
+    --shadow-xs: 0 1px 3px rgba(11, 16, 35, 0.08);
+    --shadow-sm: 0 2px 8px rgba(11, 16, 35, 0.1);
+    --shadow-md: 0 4px 16px rgba(11, 16, 35, 0.12);
+    --shadow-lg: 0 8px 32px rgba(11, 16, 35, 0.15);
+    /* O "glow" azul é o destaque do DS: reservado para o que está ativo ou em foco. */
+    --shadow-glow: 0 16px 48px rgba(29, 102, 255, 0.2);
+
+    /**
+     * Movimento.
+     *
+     * Não está no DS, então foi definido aqui — e definido como token, não solto em cada
+     * componente, porque animação inconsistente é o que faz uma interface parecer barata.
+     *
+     * `ease-out` é uma curva expo: sai rápido e desacelera, o que dá sensação de resposta
+     * imediata. `ease-spring` ultrapassa levemente o alvo e volta — usado só em seleção,
+     * onde o pequeno "estalo" confirma o clique.
+     */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --duration-instant: 120ms;
+    --duration-fast: 200ms;
+    --duration-base: 320ms;
+    --duration-slow: 520ms;
+  }
+
   html {
     color-scheme: dark;
   }
 
   body {
     @apply bg-surface-base text-ink-primary antialiased;
+    font-feature-settings: 'cv11', 'ss01';
   }
 
   /* Acessibilidade: foco visível em toda navegação por teclado, sem exceção. */
   :focus-visible {
-    @apply outline outline-2 outline-offset-2 outline-accent;
+    outline: 2px solid var(--wc-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /**
+   * Quem pediu menos movimento recebe menos movimento.
+   *
+   * Não é opcional: animação pode causar enjoo e desorientação em pessoas com sensibilidade
+   * vestibular. O estado final continua o mesmo — só a transição desaparece.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Barra de rolagem discreta, no tom das superfícies. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.surface.hover');
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-pill);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.ink.muted');
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /**
+   * Entrada de conteúdo novo.
+   *
+   * Aparecer subindo poucos pixels indica de onde a coisa veio — surgir do nada obriga o olho
+   * a procurar o que mudou.
+   */
+  .animate-rise {
+    animation: rise var(--duration-base) var(--ease-out) both;
+  }
+
+  /** Grade de resultados: cada item entra logo após o anterior, guiando a leitura. */
+  .stagger > * {
+    animation: rise var(--duration-base) var(--ease-out) both;
+  }
+  .stagger > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .stagger > *:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .stagger > *:nth-child(3) {
+    animation-delay: 120ms;
+  }
+  .stagger > *:nth-child(4) {
+    animation-delay: 180ms;
+  }
+  .stagger > *:nth-child(5) {
+    animation-delay: 240ms;
+  }
+  .stagger > *:nth-child(6) {
+    animation-delay: 300ms;
+  }
+  .stagger > *:nth-child(7) {
+    animation-delay: 360ms;
+  }
+  .stagger > *:nth-child(8) {
+    animation-delay: 420ms;
+  }
+
+  /** Placeholder de carregamento: varredura de luz atravessando a superfície. */
+  .shimmer {
+    background: linear-gradient(
+      100deg,
+      theme('colors.surface.raised') 30%,
+      theme('colors.surface.hover') 50%,
+      theme('colors.surface.raised') 70%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /** Enquanto a geração corre: o contorno pulsa para dizer que algo está acontecendo. */
+  .pulse-glow {
+    animation: pulse-glow 2s var(--ease-out) infinite;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(29, 102, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(29, 102, 255, 0);
   }
 }

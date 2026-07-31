@@ -90,15 +90,32 @@ export function LibraryPanel({
 
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between px-2">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-ink-muted">Biblioteca</h2>
+      <div className="mb-3 flex items-center justify-between px-1">
+        <h2 className="text-label uppercase text-ink-muted">Referências</h2>
         <button
           type="button"
           onClick={() => fileInput.current?.click()}
           disabled={upload.isPending}
-          className="text-xs text-accent hover:underline disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-micro font-semibold text-accent-40 transition-all duration-fast ease-out hover:bg-accent/10 hover:text-accent disabled:opacity-50"
         >
-          {upload.isPending ? 'enviando…' : '+ enviar'}
+          {upload.isPending ? (
+            'enviando…'
+          ) : (
+            <>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                aria-hidden
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              enviar
+            </>
+          )}
         </button>
       </div>
 
@@ -123,9 +140,18 @@ export function LibraryPanel({
       )}
 
       {assets.data?.length === 0 && (
-        <p className="px-2 text-xs leading-relaxed text-ink-muted">
-          Nenhuma referência ainda. JPEG, PNG ou WebP, até 15 MB.
-        </p>
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          className="w-full rounded-lg border border-dashed border-surface-border px-3 py-8 text-center transition-all duration-fast ease-out hover:border-accent-40/60 hover:bg-accent/[0.04]"
+        >
+          <span className="block text-micro font-semibold text-ink-secondary">
+            Arraste ou clique para enviar
+          </span>
+          <span className="mt-1 block text-micro text-ink-muted">
+            JPEG, PNG ou WebP · até 15 MB
+          </span>
+        </button>
       )}
 
       <ul className="space-y-2">
@@ -164,18 +190,23 @@ function AssetCard({
 
   return (
     <li
-      className={`rounded-md border p-2 ${
-        attached ? 'border-accent-dim bg-surface-overlay' : 'border-surface-border'
+      className={`animate-rise rounded-lg border p-2.5 transition-all duration-fast ease-out ${
+        attached
+          ? 'border-accent/40 bg-accent/[0.08] shadow-glow-sm'
+          : 'border-surface-border bg-surface-overlay hover:border-surface-hover'
       }`}
     >
       <div className="flex gap-2">
         <Thumbnail asset={asset} />
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs text-ink-secondary" title={asset.originalName ?? ''}>
+          <p
+            className="truncate text-micro font-medium text-ink-primary"
+            title={asset.originalName ?? ''}
+          >
             {asset.originalName ?? 'sem nome'}
           </p>
-          <p className="mt-0.5 text-xs text-ink-muted">
+          <p className="mt-1 text-micro text-ink-muted">
             {asset.status === 'PROCESSING' && 'processando…'}
             {asset.status === 'FAILED' && <span className="text-state-error">falhou</span>}
             {asset.status === 'READY' && asset.width
@@ -204,7 +235,7 @@ function AssetCard({
               <select
                 value={reference.role}
                 onChange={(e) => onUpdate({ role: e.target.value as SceneReference['role'] })}
-                className="w-full rounded border border-surface-border bg-surface-base px-1.5 py-1 text-xs text-ink-secondary"
+                className="w-full rounded-md border border-surface-border bg-surface-base px-2 py-1.5 text-micro font-medium text-ink-secondary transition-colors hover:border-surface-hover focus:border-accent focus:outline-none"
               >
                 {referenceRoleSchema.options.map((role) => (
                   <option key={role} value={role}>
@@ -233,7 +264,7 @@ function AssetCard({
             <button
               type="button"
               onClick={onDetach}
-              className="text-xs text-ink-muted hover:text-ink-secondary"
+              className="text-micro text-ink-muted transition-colors hover:text-state-error"
             >
               remover da cena
             </button>
@@ -242,7 +273,7 @@ function AssetCard({
           <button
             type="button"
             onClick={onAttach}
-            className="mt-2 w-full rounded border border-surface-border py-1 text-xs text-ink-secondary hover:text-ink-primary"
+            className="mt-2.5 w-full rounded-md border border-surface-border py-1.5 text-micro font-semibold text-ink-secondary transition-all duration-fast ease-out hover:border-accent hover:bg-accent/10 hover:text-accent-40"
           >
             usar nesta cena
           </button>
@@ -259,7 +290,7 @@ function Thumbnail({ asset }: { asset: Asset }) {
       <img
         src={asset.thumbnailUrl}
         alt={asset.originalName ?? 'Referência'}
-        className="h-11 w-11 shrink-0 rounded object-cover"
+        className="h-12 w-12 shrink-0 rounded-md object-cover ring-1 ring-surface-border"
       />
     );
   }
@@ -267,7 +298,7 @@ function Thumbnail({ asset }: { asset: Asset }) {
   return (
     <div
       aria-hidden
-      className="h-11 w-11 shrink-0 rounded bg-surface-overlay"
+      className={`h-12 w-12 shrink-0 rounded-md ${asset.status === 'PROCESSING' ? 'shimmer' : 'bg-surface-hover'}`}
       title={asset.status === 'PROCESSING' ? 'gerando miniatura' : undefined}
     />
   );
