@@ -156,7 +156,7 @@ inferido do schema em vez de declarado à parte.
 
 **Status:** aceita (Fase 1)
 
-`IMAGE_PROVIDER_DEFAULT=fake` é o padrão do `.env.example`. Nenhuma chave real é necessária
+Nenhuma chave real é necessária
 para rodar, testar ou demonstrar o sistema, e um erro de retry não pode gerar cobrança.
 
 O fake simula latência, emite progresso, produz PNG placeholder determinístico (derivado da
@@ -975,6 +975,106 @@ espacial que o dado nao tem.
 As travas ganharam secao no inspetor na mesma passagem. Ate aqui elas existiam no schema e no
 compilador ("Must preserve: ...") mas nao tinham como ser ligadas pela interface — o recurso
 existia sem porta de entrada.
+
+---
+
+## D-056 — Elegibilidade e pontuacao sao decisoes separadas
+
+**Status:** aceita (Fase 9)
+
+O roteador faz duas coisas que parecem uma so. **Elegibilidade** e binaria: um provedor que
+nao faz edicao por mascara nao e uma opcao ruim para uma edicao por mascara — nao e uma
+opcao. **Pontuacao** ordena quem sobrou, pelos pesos do blueprint 11.3.
+
+Misturar as duas deixaria um empate improvavel escolher alguem que vai falhar na submissao,
+gastando uma chamada para receber um erro previsivel.
+
+Fundo transparente derruba por completo: nao ha como recortar depois sem inventar um
+resultado. Ja a falta de negative prompt so penaliza — o compilador dobra as restricoes
+dentro do prompt principal, funciona pior, mas funciona.
+
+Formato NAO entra na elegibilidade. O que o provedor devolve e o arquivo de trabalho; o
+formato que o usuario pediu e aplicado na exportacao, por conversao. Descartar um provedor
+por isso recusaria a cena inteira por uma diferenca que ja tem solucao.
+
+---
+
+## D-057 — Qualidade percebida e configuracao, nao capacidade
+
+**Status:** aceita (Fase 9)
+
+`ProviderCapabilities` descreve o que o fornecedor faz. Quanto ele faz bem e julgamento
+nosso, e muda quando o fornecedor melhora ou piora sem que o adapter mude uma linha.
+
+Por isso `PROVIDER_QUALITY` vive em `@waymage/provider-sdk/presets`, junto do registro que a
+API e o worker compartilham. Se cada um montasse a propria lista, a estimativa mostraria um
+provedor e a geracao usaria outro — e a diferenca so apareceria na fatura.
+
+---
+
+## D-058 — A reserva acompanha o fallback, em vez de cobrir o pior caso
+
+**Status:** aceita (Fase 9)
+
+A API reserva o preco do provedor que venceu o roteamento — o mesmo numero que o usuario viu
+na estimativa. Quando o worker precisa cair para outro fornecedor mais caro, ele completa a
+reserva antes de submeter.
+
+A alternativa era reservar de saida o teto entre os candidatos. Foi tentada e descartada: com
+dois provedores de precos diferentes, toda geracao prenderia o triplo do saldo por causa de
+um fallback que quase nunca acontece — uma carteira de 100 creditos passaria de 25 geracoes
+para 8.
+
+Se o saldo nao cobrir o complemento, a falha e de credito e o job para ali: tentar o proximo
+candidato so trocaria uma falha por outra.
+
+Teto de dois provedores por job. Um fallback cobre a falha isolada, que e o caso comum;
+percorrer a lista inteira transformaria uma indisponibilidade geral numa espera longa, com
+cada candidato expirando no seu proprio timeout.
+
+---
+
+## D-059 — Recompilar o prompt a cada candidato
+
+**Status:** aceita (Fase 9)
+
+O prompt depende de quem vai recebe-lo: provedor sem negative prompt recebe as restricoes
+dobradas dentro do prompt principal. Reaproveitar o prompt do primeiro candidato no segundo
+mandaria um texto feito para outro fornecedor.
+
+Por isso a compilacao vive dentro da tentativa, e cada tentativa grava a sua
+`PromptCompilation`. O custo e recompilar — operacao local, sem rede. O beneficio e que o
+registro de auditoria mostra exatamente o texto que cada fornecedor recebeu.
+
+---
+
+## D-060 — A execucao entra na chave do resultado
+
+**Status:** aceita (Fase 9)
+
+`generations/{jobId}/{providerRunId}/{indice}.{ext}`, e nao `generations/{jobId}/{indice}`.
+
+Um job pode executar mais de uma vez — retentativa da fila ou fallback para outro provedor.
+Sem a execucao na chave, a segunda escrita esbarra na unicidade de `Asset.storageKey` e
+derruba um job que tinha dado certo. Apareceu no log durante a verificacao da Fase 9, num job
+reprocessado apos o worker reiniciar.
+
+---
+
+## D-061 — Suite de contrato compartilhada entre adapters
+
+**Status:** aceita (Fase 9)
+
+A promessa da interface `ImageProvider` e trocar de fornecedor sem tocar no orquestrador. A
+promessa so vale se cada adapter se comportar igual nas bordas: `succeeded` sempre com
+imagem, recusa na submissao quando pedem mais saidas do que o teto, job desconhecido virando
+erro em vez de status inventado, cancelar duas vezes sem explodir.
+
+`runProviderContract` roda contra qualquer implementacao. Fica fora do `dist` porque importa
+vitest — e ferramenta de teste, nao codigo de producao.
+
+O que a suite NAO verifica: qualidade da imagem, aderencia ao prompt e custo real. Nada disso
+e verificavel sem chamar o fornecedor, e um teste que precisa de chave paga nao roda em CI.
 
 ---
 

@@ -1,4 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["src/**/*.test.ts", "dist", "node_modules"]
+  // `contract.ts` importa vitest: e ferramenta de teste, nao codigo de producao. Fica fora do
+  // dist para que nenhum import acidental arraste o vitest para dentro de um container.
+  "exclude": ["src/**/*.test.ts", "src/contract.ts", "dist", "node_modules"]
 }

@@ -122,14 +122,25 @@ describe('estimativa', () => {
       prompt: string;
       summary: string;
       canGenerate: boolean;
+      alternatives: { provider: string; eligible: boolean; credits: number; score: number }[];
     };
 
-    expect(estimate.provider).toBe('fake');
+    expect(estimate.provider).toBe('fake-rapido');
     expect(estimate.credits).toBeGreaterThan(0);
     expect(estimate.count).toBe(4);
     expect(estimate.prompt.length).toBeGreaterThan(50);
     expect(estimate.summary).toContain('4 imagens');
     expect(estimate.canGenerate).toBe(true);
+
+    // A alternativa descartada aparece com o motivo: "por que não usou o melhor" é a
+    // primeira pergunta de quem vê o número, e responder depois exigiria reproduzir a
+    // decisão de roteamento fora do sistema.
+    expect(estimate.alternatives.length).toBeGreaterThan(1);
+    expect(estimate.alternatives[0]?.provider).toBe(estimate.provider);
+    expect(estimate.alternatives[0]?.credits).toBe(estimate.credits);
+    // Ordenada por pontuação, do melhor para o pior.
+    const scores = estimate.alternatives.filter((a) => a.eligible).map((a) => a.score);
+    expect([...scores].sort((a, b) => b - a)).toEqual(scores);
   }, 60_000);
 
   it('marca canGenerate como falso quando a cena tem erro bloqueante', async () => {

@@ -3,6 +3,7 @@ import { ProviderError } from './errors';
 import { encodePng } from './png';
 import type {
   ImageProvider,
+  ProviderCapabilities,
   ProviderCostEstimate,
   ProviderEditRequest,
   ProviderGenerationRequest,
@@ -20,16 +21,28 @@ import type {
  *
  * Gatilhos de falha ficam no próprio prompt para que um teste E2E possa acioná-los sem
  * mexer na configuração:
- *   `[[fail]]`     → ProviderError transitório
- *   `[[timeout]]`  → job trava em `running` e expira
- *   `[[blocked]]`  → rejeição por política de conteúdo
+ *   `[[fail]]`         → ProviderError transitório
+ *   `[[fail:<id>]]`    → falha só naquele provedor, para exercitar o fallback
+ *   `[[timeout]]`      → job trava em `running` e expira
+ *   `[[blocked]]`      → rejeição por política de conteúdo
  */
 
 export interface FakeProviderOptions {
+  /**
+   * Identificador no registro.
+   *
+   * Existe para que dois perfis diferentes possam coexistir: o roteador só tem o que
+   * decidir quando ha mais de um provedor, e ate a Fase 9 havia um so.
+   */
+  id?: string;
   /** Latência simulada por job, em ms. 0 conclui imediatamente. */
   latencyMs?: number;
   /** Relógio injetável — os testes não devem depender de tempo real. */
   now?: () => number;
+  /** Capacidades sobrescritas, para simular um provedor de outro perfil. */
+  capabilities?: Partial<ProviderCapabilities>;
+  /** Créditos por imagem em rascunho. Qualidade final custa quatro vezes isso. */
+  creditsPerImage?: number;
 }
 
 const ASPECT_DIMENSIONS: Record<AspectRatio, readonly [number, number]> = {
@@ -94,38 +107,47 @@ function hueToRgb(hue: number, lightness: number): readonly [number, number, num
   ] as const;
 }
 
+const BASE_CAPABILITIES: ProviderCapabilities = {
+  textToImage: true,
+  imageToImage: true,
+  maskedEdit: true,
+  multipleReferences: true,
+  transparentBackground: false,
+  seed: true,
+  negativePrompt: true,
+  partialStreaming: false,
+  supportedAspectRatios: Object.keys(ASPECT_DIMENSIONS) as AspectRatio[],
+  supportedFormats: ['png'],
+  maxReferenceImages: 6,
+  maxOutputs: 8,
+};
+
 export class FakeImageProvider implements ImageProvider {
-  readonly id = 'fake';
+  readonly id: string;
 
   private readonly jobs = new Map<string, FakeJob>();
   private readonly latencyMs: number;
   private readonly now: () => number;
+  private readonly capabilities: ProviderCapabilities;
+  private readonly creditsPerImage: number;
   private counter = 0;
 
   constructor(options: FakeProviderOptions = {}) {
+    this.id = options.id ?? 'fake';
     this.latencyMs = options.latencyMs ?? 1200;
     this.now = options.now ?? (() => Date.now());
+    this.capabilities = { ...BASE_CAPABILITIES, ...options.capabilities };
+    this.creditsPerImage = options.creditsPerImage ?? 1;
   }
 
-  getCapabilities() {
-    return {
-      textToImage: true,
-      imageToImage: true,
-      maskedEdit: true,
-      multipleReferences: true,
-      transparentBackground: false,
-      seed: true,
-      negativePrompt: true,
-      partialStreaming: false,
-      supportedAspectRatios: Object.keys(ASPECT_DIMENSIONS) as AspectRatio[],
-      supportedFormats: ['png'] as const,
-      maxReferenceImages: 6,
-      maxOutputs: 8,
-    };
+  getCapabilities(): ProviderCapabilities {
+    return this.capabilities;
   }
 
   async estimateCost(request: ProviderGenerationRequest): Promise<ProviderCostEstimate> {
-    const perImage = request.mode === 'final' ? 4 : 1;
+    // Qualidade final custa quatro vezes o rascunho em todo provedor conhecido; o que muda
+    // entre eles é a base.
+    const perImage = this.creditsPerImage * (request.mode === 'draft' ? 1 : 4);
     return {
       externalCostCents: 0,
       credits: perImage * request.count,
@@ -230,12 +252,12 @@ export class FakeImageProvider implements ImageProvider {
       );
     }
 
-    const providerJobId = `fake_${(++this.counter).toString().padStart(6, '0')}`;
+    const providerJobId = `${this.id}_${(++this.counter).toString().padStart(6, '0')}`;
     this.jobs.set(providerJobId, {
       request,
       startedAt: this.now(),
       cancelled: false,
-      behaviour: behaviourFor(request.prompt),
+      behaviour: behaviourFor(request.prompt, this.id),
     });
     return { providerJobId, provider: this.id, model: 'fake-diffusion-v1' };
   }
@@ -265,10 +287,14 @@ export class FakeImageProvider implements ImageProvider {
   }
 }
 
-function behaviourFor(prompt: string): FakeJob['behaviour'] {
+function behaviourFor(prompt: string, providerId: string): FakeJob['behaviour'] {
   if (prompt.includes(FAILURE_TRIGGERS.timeout)) return 'timeout';
   if (prompt.includes(FAILURE_TRIGGERS.blocked)) return 'blocked';
-  if (prompt.includes(FAILURE_TRIGGERS.fail)) return 'fail';
+  // Direcionado antes de geral: `[[fail:x]]` derruba x e deixa os outros passarem, que é o
+  // único jeito de exercitar o fallback ponta a ponta sem depender de um fornecedor real
+  // resolver falhar na hora certa.
+  if (prompt.includes(`[[fail:${providerId}]]`)) return 'fail';
+  if (prompt.includes(FAILURE_TRIGGERS.fail) && !prompt.includes('[[fail:')) return 'fail';
   return 'succeed';
 }
 

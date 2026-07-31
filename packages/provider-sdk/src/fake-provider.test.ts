@@ -176,3 +176,29 @@ describe('ProviderRegistry', () => {
     expect(() => registry.get('midjourney')).toThrow(/Disponíveis: fake/);
   });
 });
+
+describe('gatilho direcionado', () => {
+  it('derruba só o provedor nomeado', async () => {
+    const alvo = new FakeImageProvider({ id: 'alvo', latencyMs: 0 });
+    const outro = new FakeImageProvider({ id: 'outro', latencyMs: 0 });
+    const prompt = 'cena qualquer [[fail:alvo]]';
+
+    const base = {
+      requestId: 'r',
+      prompt,
+      references: [],
+      aspectRatio: '1:1',
+      format: 'png',
+      count: 1,
+      mode: 'draft',
+    } as const;
+
+    const alvoJob = await alvo.generate(base);
+    const outroJob = await outro.generate(base);
+
+    expect((await alvo.getStatus(alvoJob.providerJobId)).state).toBe('failed');
+    // Sem isto o fallback não teria como ser exercitado: os dois provedores falhariam pelo
+    // mesmo prompt e nunca haveria recuperação para observar.
+    expect((await outro.getStatus(outroJob.providerJobId)).state).toBe('succeeded');
+  });
+});

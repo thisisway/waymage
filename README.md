@@ -184,7 +184,7 @@ publica progresso por Redis pub/sub, que a API reemite por SSE.
 
 ### Provedor falso
 
-`IMAGE_PROVIDER_DEFAULT=fake` é o padrão. O `FakeImageProvider` simula latência, emite
+A escolha do provedor é do `ModelRouter`. O `FakeImageProvider` simula latência, emite
 progresso e gera PNGs determinísticos sem rede e sem custo. Gatilhos de falha ficam no
 próprio prompt:
 

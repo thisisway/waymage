@@ -1,4 +1,4 @@
-import { captureCredits, recordUsage, releaseCredits } from '@waymage/billing';
+import { captureCredits, recordUsage, releaseCredits, reserveCredits } from '@waymage/billing';
 import {
   AssetKind,
   AssetStatus,
@@ -16,7 +16,13 @@ import {
   type GenerationState,
 } from '@waymage/domain';
 import { promptCompiler } from '@waymage/prompt-compiler';
-import { ProviderError, type ProviderImage, type ProviderReference } from '@waymage/provider-sdk';
+import {
+  ProviderError,
+  type GenerationMode,
+  type ImageProvider,
+  type ProviderImage,
+  type ProviderReference,
+} from '@waymage/provider-sdk';
 import { parseSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { SIGNED_URL_TTL, type StorageService, storageKeys } from '@waymage/storage';
 import type { Job } from 'bullmq';
@@ -25,7 +31,7 @@ import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
 import { moderate } from './moderation';
-import { resolveProvider } from './providers';
+import { recentReliability, resolveCandidates, routingContext } from './providers';
 import { runProviderJob } from './run-provider-job';
 
 /**
@@ -38,6 +44,15 @@ import { runProviderJob } from './run-provider-job';
  * O estado vai para o banco (fonte da verdade, sobrevive a restart) e para o Redis (pub/sub,
  * que a API reemite por SSE). Só o banco não bastaria: a API teria de fazer polling.
  */
+
+/**
+ * Teto de provedores por job.
+ *
+ * Dois: um fallback cobre a falha isolada de um fornecedor, que e o caso comum. Percorrer a
+ * lista inteira transformaria uma indisponibilidade geral numa espera longa, com o usuario
+ * olhando uma barra de progresso enquanto cada candidato expira no seu proprio timeout.
+ */
+const MAX_PROVIDER_ATTEMPTS = 2;
 
 export interface ProcessorDeps {
   prisma: PrismaClient;
@@ -100,8 +115,31 @@ export async function processGenerationJob(
   try {
     await advance(record.status as GenerationState, 'VALIDATING');
 
-    const provider = resolveProvider(record.providerStrategy);
-    const capabilities = provider.getCapabilities();
+    /**
+     * Roteamento (blueprint §11.3).
+     *
+     * Acontece antes da compilação porque o prompt depende das capacidades do provedor: sem
+     * negative prompt, o compilador dobra as restrições dentro do prompt principal. Escolher
+     * depois de compilar produziria um prompt feito para outro fornecedor.
+     */
+    const routing = {
+      operation: record.operationType,
+      aspectRatio: spec.output.aspectRatio,
+      format: spec.output.format,
+      count: record.requestedCount,
+      mode: (record.operationType === 'MASKED_EDIT'
+        ? 'edit'
+        : spec.output.quality === 'final' || record.operationType === 'REFINE'
+          ? 'final'
+          : 'draft') as GenerationMode,
+      referenceCount: spec.references.length,
+      transparentBackground: spec.output.transparentBackground,
+      needsSeed: spec.advanced.seed !== null,
+      needsNegativePrompt: Boolean(spec.advanced.negativePrompt),
+    } as const;
+
+    const context = routingContext(await recentReliability(prisma));
+    const candidates = await resolveCandidates(record.providerStrategy, routing, context);
 
     await advance('VALIDATING', 'MODERATING_INPUT');
     const inputVerdict = moderate({ text: spec.subject.description + ' ' + spec.scene.location });
@@ -140,41 +178,10 @@ export async function processGenerationJob(
           ? Number(record.sourceResult?.seed ?? spec.advanced.seed ?? 0) || undefined
           : (spec.advanced.seed ?? undefined);
 
-    const compilation = await promptCompiler.compile({
-      sceneSpec: spec,
-      providerCapabilities: capabilities,
-      mode,
-      ...(record.editOperation ? { editInstruction: record.editOperation.instruction } : {}),
-    });
-
-    // Nunca guardar só o prompt: SceneSpec normalizado, versão do compilador e avisos
-    // ficam junto, senão não há como explicar por que uma imagem saiu como saiu.
-    await prisma.promptCompilation.create({
-      data: {
-        workspaceId: payload.workspaceId,
-        generationJobId: record.id,
-        provider: provider.id,
-        mode,
-        prompt: compilation.prompt,
-        negativePrompt: compilation.negativePrompt ?? null,
-        referenceInstructions:
-          compilation.referenceInstructions as unknown as Prisma.InputJsonValue,
-        warnings: compilation.warnings as unknown as Prisma.InputJsonValue,
-        normalizedSpec: compilation.normalizedSceneSpec as unknown as Prisma.InputJsonValue,
-        compilerVersion: compilation.compilerVersion,
-      },
-    });
-
-    await advance('COMPILING', 'ROUTING');
-    await prisma.generationJob.update({
-      where: { id: record.id },
-      data: { selectedProvider: provider.id, startedAt: new Date() },
-    });
-
     const references = await resolveReferences(spec, payload.workspaceId, prisma, storage);
 
-    // Refinamento anexa a imagem de origem: o provedor precisa vê-la para manter a
-    // composição enquanto acrescenta detalhe.
+    // Refinamento anexa a imagem de origem: o provedor precisa ve-la para manter a
+    // composicao enquanto acrescenta detalhe.
     if (record.operationType === 'REFINE' && record.sourceResult?.asset) {
       references.push({
         role: 'scene',
@@ -185,11 +192,11 @@ export async function processGenerationJob(
     }
 
     /**
-     * Edição localizada: imagem base e máscara vão fora de `references`.
+     * Edicao localizada: imagem base e mascara vao fora de `references`.
      *
-     * São insumos posicionais, não influências — o provedor precisa saber exatamente QUAL
-     * arquivo repintar e ONDE. Tratá-los como referência os colocaria em pé de igualdade com
-     * as referências de estilo, e o provedor escolheria quanto peso dar.
+     * Sao insumos posicionais, nao influencias — o provedor precisa saber exatamente QUAL
+     * arquivo repintar e ONDE. Trata-los como referencia os colocaria em pe de igualdade com
+     * as referencias de estilo, e o provedor escolheria quanto peso dar.
      */
     const editInputs =
       record.operationType === 'MASKED_EDIT' && record.sourceResult?.asset
@@ -211,65 +218,189 @@ export async function processGenerationJob(
           }
         : {};
 
-    const request = {
-      requestId: payload.requestId,
-      prompt: compilation.prompt,
-      ...(compilation.negativePrompt ? { negativePrompt: compilation.negativePrompt } : {}),
-      references,
-      aspectRatio: spec.output.aspectRatio,
-      format: spec.output.format,
-      count: record.requestedCount,
-      mode,
-      ...(seed === undefined ? {} : { seed }),
-      transparentBackground: spec.output.transparentBackground,
-      sceneSpec: spec,
-      ...editInputs,
-    } as const;
-
-    const providerRun = await prisma.providerRun.create({
-      data: {
-        workspaceId: payload.workspaceId,
-        generationJobId: record.id,
-        provider: provider.id,
-        // Sem as URLs assinadas: elas dão acesso aos arquivos e não devem ficar no banco.
-        // Vale para referências, imagem base e máscara — todas são links de leitura direta.
-        request: {
-          ...request,
-          baseImageUrl: undefined,
-          maskUrl: undefined,
-          references: references.map(({ url: _url, ...rest }) => rest),
-        } as unknown as Prisma.InputJsonValue,
-        status: ProviderRunStatus.RUNNING,
-        attempt: job.attemptsMade + 1,
-      },
-      select: { id: true },
-    });
-
+    await advance('COMPILING', 'ROUTING');
     await advance('ROUTING', 'SUBMITTING');
 
-    const status = await runProviderJob(provider, request, {
-      timeoutMs: env.PROVIDER_TIMEOUT_MS,
-      pollIntervalMs: 250,
-      onProgress: async (progress, state) => {
-        if (state !== 'running') return;
-        // Progresso dentro de PROCESSING é contínuo; a transição de estado acontece uma vez.
-        await deps.events.publish(event(record.id, 'PROCESSING', 0.25 + progress * 0.35));
-      },
-    });
+    /**
+     * Uma tentativa contra um provedor: compila, registra e executa.
+     *
+     * A compilacao vive aqui dentro, e nao antes do laco, porque o prompt depende de quem vai
+     * recebe-lo — provedor sem negative prompt recebe as restricoes dobradas dentro do prompt
+     * principal. Reaproveitar o prompt do primeiro candidato no segundo mandaria um texto
+     * feito para outro fornecedor.
+     */
+    const attempt = async (provider: ImageProvider, attemptNumber: number) => {
+      const compilation = await promptCompiler.compile({
+        sceneSpec: spec,
+        providerCapabilities: provider.getCapabilities(),
+        mode,
+        ...(record.editOperation ? { editInstruction: record.editOperation.instruction } : {}),
+      });
+
+      // Nunca guardar so o prompt: SceneSpec normalizado, versao do compilador e avisos
+      // ficam junto, senao nao ha como explicar por que uma imagem saiu como saiu.
+      await prisma.promptCompilation.create({
+        data: {
+          workspaceId: payload.workspaceId,
+          generationJobId: record.id,
+          provider: provider.id,
+          mode,
+          prompt: compilation.prompt,
+          negativePrompt: compilation.negativePrompt ?? null,
+          referenceInstructions:
+            compilation.referenceInstructions as unknown as Prisma.InputJsonValue,
+          warnings: compilation.warnings as unknown as Prisma.InputJsonValue,
+          normalizedSpec: compilation.normalizedSceneSpec as unknown as Prisma.InputJsonValue,
+          compilerVersion: compilation.compilerVersion,
+        },
+      });
+
+      await prisma.generationJob.update({
+        where: { id: record.id },
+        data: { selectedProvider: provider.id, startedAt: new Date() },
+      });
+
+      const request = {
+        requestId: payload.requestId,
+        prompt: compilation.prompt,
+        ...(compilation.negativePrompt ? { negativePrompt: compilation.negativePrompt } : {}),
+        references,
+        aspectRatio: spec.output.aspectRatio,
+        format: spec.output.format,
+        count: record.requestedCount,
+        mode,
+        ...(seed === undefined ? {} : { seed }),
+        transparentBackground: spec.output.transparentBackground,
+        sceneSpec: spec,
+        ...editInputs,
+      } as const;
+
+      const providerRun = await prisma.providerRun.create({
+        data: {
+          workspaceId: payload.workspaceId,
+          generationJobId: record.id,
+          provider: provider.id,
+          // Sem as URLs assinadas: elas dao acesso aos arquivos e nao devem ficar no banco.
+          // Vale para referencias, imagem base e mascara — todas sao links de leitura direta.
+          request: {
+            ...request,
+            baseImageUrl: undefined,
+            maskUrl: undefined,
+            references: references.map(({ url: _url, ...rest }) => rest),
+          } as unknown as Prisma.InputJsonValue,
+          status: ProviderRunStatus.RUNNING,
+          attempt: attemptNumber,
+        },
+        select: { id: true },
+      });
+
+      try {
+        const status = await runProviderJob(provider, request, {
+          timeoutMs: env.PROVIDER_TIMEOUT_MS,
+          pollIntervalMs: 250,
+          onProgress: async (progress, state) => {
+            if (state !== 'running') return;
+            // Progresso dentro de PROCESSING e continuo; a transicao de estado acontece uma vez.
+            await deps.events.publish(event(record.id, 'PROCESSING', 0.25 + progress * 0.35));
+          },
+        });
+
+        await prisma.providerRun.update({
+          where: { id: providerRun.id },
+          data: {
+            status: ProviderRunStatus.SUCCEEDED,
+            latencyMs: status.latencyMs ?? null,
+            costExternal: status.externalCostCents ?? 0,
+            response: { imageCount: status.images.length } as Prisma.InputJsonValue,
+          },
+        });
+
+        return { status, providerRunId: providerRun.id, provider };
+      } catch (error) {
+        // A tentativa fica registrada como falha antes de propagar: e dela que sai a taxa de
+        // sucesso recente que o roteador consulta na proxima decisao.
+        await prisma.providerRun.update({
+          where: { id: providerRun.id },
+          data: {
+            status: ProviderRunStatus.FAILED,
+            errorCode: error instanceof ProviderError ? error.code : 'INTERNAL_ERROR',
+          },
+        });
+        throw error;
+      }
+    };
+
+    /**
+     * Fallback automatico (blueprint 11.3).
+     *
+     * So entre candidatos que o roteador ja considerou elegiveis — cair para um provedor que
+     * nao faz a operacao, ou que custa mais do que foi reservado, trocaria uma falha por
+     * outra. Rejeicao por politica de conteudo nao e motivo para tentar de novo: o pedido e o
+     * mesmo, e o proximo fornecedor recusaria igual, cobrando por isso.
+     */
+    /**
+     * Completa a reserva quando o candidato custa mais do que ja esta reservado.
+     *
+     * Reservar o pior caso la na API travaria credito de um fallback que quase nunca
+     * acontece — com dois provedores de precos diferentes, o usuario veria o triplo do saldo
+     * preso em toda geracao. Aqui so se paga pela troca quando a troca ocorre; e se o saldo
+     * nao cobrir, a falha e de credito e nao adianta tentar o proximo.
+     */
+    const topUpReservation = async (provider: ImageProvider, current: number) => {
+      const { credits } = await provider.estimateCost({
+        requestId: payload.requestId,
+        prompt: '',
+        references: [],
+        aspectRatio: spec.output.aspectRatio,
+        format: spec.output.format,
+        count: record.requestedCount,
+        mode,
+      });
+
+      if (credits <= current) return current;
+
+      await reserveCredits(prisma, {
+        workspaceId: payload.workspaceId,
+        amount: credits - current,
+        generationJobId: record.id,
+        idempotencyKey: `topup:${record.id}:${provider.id}`,
+      });
+
+      await prisma.generationJob.update({
+        where: { id: record.id },
+        data: { reservedCredits: credits },
+      });
+
+      return credits;
+    };
+
+    let reserved = record.reservedCredits;
+    const attempts = candidates.slice(0, MAX_PROVIDER_ATTEMPTS);
+    let outcome: Awaited<ReturnType<typeof attempt>> | null = null;
+
+    for (const [index, candidate] of attempts.entries()) {
+      try {
+        reserved = await topUpReservation(candidate, reserved);
+        outcome = await attempt(candidate, index + 1);
+        break;
+      } catch (error) {
+        const failure = error instanceof ProviderError ? error : null;
+        const last = index + 1 >= attempts.length;
+        if (last || !(failure?.refundable ?? true)) throw error;
+
+        log.warn(
+          { provider: candidate.id, next: attempts[index + 1]?.id, code: failure?.code },
+          'Provedor falhou; tentando o proximo',
+        );
+      }
+    }
+
+    if (!outcome) throw new Error('Nenhum candidato de provedor foi executado.');
+    const { status, providerRunId, provider } = outcome;
 
     await prisma.generationJob.updateMany({
       where: { id: record.id, status: GenerationStatus.SUBMITTING },
       data: { status: GenerationStatus.PROCESSING },
-    });
-
-    await prisma.providerRun.update({
-      where: { id: providerRun.id },
-      data: {
-        status: ProviderRunStatus.SUCCEEDED,
-        latencyMs: status.latencyMs ?? null,
-        costExternal: status.externalCostCents ?? 0,
-        response: { imageCount: status.images.length } as Prisma.InputJsonValue,
-      },
     });
 
     await advance('PROCESSING', 'DOWNLOADING');
@@ -277,7 +408,7 @@ export async function processGenerationJob(
       workspaceId: payload.workspaceId,
       projectId: record.projectId,
       jobId: record.id,
-      providerRunId: providerRun.id,
+      providerRunId,
       prisma,
       storage,
     });
@@ -309,11 +440,14 @@ export async function processGenerationJob(
       ),
     );
 
-    // Entregou as imagens: o que estava reservado sai de vez.
-    if (record.reservedCredits > 0) {
+    // A reserva acompanhou a escolha: o que esta reservado e exatamente o preco de quem
+    // executou, inclusive quando houve fallback e a reserva foi complementada.
+    const charged = reserved;
+
+    if (charged > 0) {
       await captureCredits(prisma, {
         workspaceId: payload.workspaceId,
-        amount: record.reservedCredits,
+        amount: charged,
         generationJobId: record.id,
         idempotencyKey: `capture:${record.id}`,
       });
@@ -324,14 +458,14 @@ export async function processGenerationJob(
       generationJobId: record.id,
       provider: provider.id,
       imagesProduced: stored.length,
-      creditsCharged: record.reservedCredits,
+      creditsCharged: charged,
       externalCostCents: status.externalCostCents ?? 0,
     });
 
     await advance('EVALUATING', 'COMPLETED', `${stored.length} imagens geradas`);
     await prisma.generationJob.update({
       where: { id: record.id },
-      data: { completedAt: new Date(), actualCredits: record.reservedCredits },
+      data: { completedAt: new Date(), actualCredits: charged },
     });
 
     log.info({ count: stored.length, provider: provider.id }, 'Geração concluída');
@@ -346,13 +480,23 @@ export async function processGenerationJob(
      * nenhuma e o crédito volta. Rejeição por política de conteúdo é a exceção — ali o
      * pedido partiu do usuário e o custo foi incorrido, então a reserva é capturada.
      */
-    if (record.reservedCredits > 0) {
+    // Recarrega do banco: o fallback pode ter complementado a reserva depois da leitura
+    // inicial, e liberar o valor antigo deixaria credito preso para sempre.
+    const outstanding =
+      (
+        await prisma.generationJob.findUnique({
+          where: { id: payload.generationJobId },
+          select: { reservedCredits: true },
+        })
+      )?.reservedCredits ?? 0;
+
+    if (outstanding > 0) {
       const refundable = providerError?.refundable ?? true;
       const settle = refundable ? releaseCredits : captureCredits;
 
       await settle(prisma, {
         workspaceId: payload.workspaceId,
-        amount: record.reservedCredits,
+        amount: outstanding,
         generationJobId: record.id,
         idempotencyKey: `${refundable ? 'release' : 'capture'}:${record.id}`,
         note: refundable ? 'Falha na geração' : 'Rejeitado por política de conteúdo',
@@ -476,6 +620,7 @@ async function storeImages(
       ctx.workspaceId,
       ctx.projectId,
       ctx.jobId,
+      ctx.providerRunId,
       index,
       extension,
     );

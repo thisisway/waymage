@@ -25,7 +25,6 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
-  IMAGE_PROVIDER_DEFAULT: z.string().min(1).default('fake'),
   FAKE_PROVIDER_LATENCY_MS: z.coerce.number().int().min(0).max(60_000).default(1200),
 
   /** Jobs processados em paralelo por instância de worker. */

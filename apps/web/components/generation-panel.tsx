@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { SceneSpec } from '@waymage/scene-spec';
 import { api, queryKeys, type GenerationJob, type GenerationResult } from '../lib/api';
 import { BeforeAfter } from './before-after';
+import { Icon } from './ui/icons';
 import type { useGeneration } from '../lib/use-generation';
 import { ResultActions } from './result-actions';
 
@@ -15,7 +16,12 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
   });
 
   if (!estimate.data) return null;
-  const { credits, estimatedSeconds, provider, summary, warnings, canGenerate } = estimate.data;
+  const { credits, estimatedSeconds, provider, summary, warnings, canGenerate, alternatives } =
+    estimate.data;
+
+  // Só o descartado interessa: repetir o escolhido, que já está em destaque acima, seria
+  // ocupar espaço para não dizer nada.
+  const others = alternatives.filter((entry) => entry.provider !== provider);
 
   return (
     <div className="animate-rise mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-raised p-4 shadow-sm">
@@ -33,6 +39,29 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
           </div>
         ))}
       </dl>
+
+      {others.length > 0 && (
+        <details className="mt-2 text-micro text-ink-muted">
+          <summary className="cursor-pointer select-none transition-colors duration-fast hover:text-ink-secondary">
+            por que este provedor?
+          </summary>
+          <ul className="mt-1.5 space-y-1 pl-1">
+            {others.map((entry) => (
+              <li key={entry.provider} className="flex flex-wrap items-baseline gap-x-2">
+                <span className={entry.eligible ? 'text-ink-secondary' : 'text-ink-muted'}>
+                  {entry.eligible ? '·' : '✕'} {entry.provider}
+                </span>
+                {entry.eligible && <span className="font-mono">{entry.credits} créditos</span>}
+                <span className="text-ink-muted">
+                  {entry.notes.length > 0
+                    ? entry.notes.join('; ')
+                    : `pontuação ${entry.score.toFixed(2)}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {warnings.length > 0 && (
         <ul className="mt-2 space-y-1">
@@ -116,6 +145,45 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Tentativas contra provedores.
+ *
+ * Só aparece quando houve mais de uma: no caminho feliz o provedor já está no resumo, e uma
+ * linha dizendo "tentativa 1 deu certo" seria ruído. Quando houve troca, o usuário precisa
+ * saber — é o que explica um job que demorou o dobro e custou outro preço.
+ */
+export function ProviderAttempts({ job }: { job: GenerationJob | null }) {
+  const runs = job?.runs ?? [];
+  if (runs.length < 2) return null;
+
+  return (
+    <ol className="animate-rise mx-auto w-full max-w-2xl space-y-1 rounded-lg border border-state-warn/30 bg-state-warn/[0.06] p-3">
+      <li className="mb-1 flex items-center gap-1.5 text-micro font-semibold uppercase tracking-wide text-state-warn">
+        <Icon name="variation" className="h-3.5 w-3.5" />
+        trocou de provedor
+      </li>
+      {runs.map((run) => (
+        <li
+          key={`${run.provider}-${run.attempt}`}
+          className="flex flex-wrap items-baseline gap-x-2 text-micro text-ink-secondary"
+        >
+          <span className="font-mono text-ink-muted">{run.attempt}.</span>
+          <span className="font-semibold text-ink-primary">{run.provider}</span>
+          <span className={run.status === 'SUCCEEDED' ? 'text-state-ok' : 'text-state-error'}>
+            {run.status === 'SUCCEEDED' ? 'entregou' : 'falhou'}
+          </span>
+          {run.errorCode && <span className="text-ink-muted">{run.errorCode}</span>}
+          {run.latencyMs !== null && (
+            <span className="font-mono text-ink-muted">
+              {Math.round(run.latencyMs / 100) / 10}s
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }
 

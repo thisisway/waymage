@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   GenerationProgressBar,
   GenerationSummary,
+  ProviderAttempts,
   ResultsGrid,
 } from '../../../components/generation-panel';
 import { ResultCompare } from '../../../components/result-compare';
@@ -355,16 +356,19 @@ function Canvas({
       {comparing.length === 2 ? (
         <ResultCompare results={results} selectedIds={comparing} onClose={onClearCompare} />
       ) : results.length > 0 ? (
-        <ResultsGrid
-          job={generation.job}
-          projectId={scene.projectId}
-          locks={scene.sceneSpec.locks}
-          placeholders={scene.sceneSpec.output.count}
-          onSelect={onSelectResult}
-          onDerive={generation.follow}
-          comparing={comparing}
-          onToggleCompare={onToggleCompare}
-        />
+        <>
+          <ProviderAttempts job={generation.job} />
+          <ResultsGrid
+            job={generation.job}
+            projectId={scene.projectId}
+            locks={scene.sceneSpec.locks}
+            placeholders={scene.sceneSpec.output.count}
+            onSelect={onSelectResult}
+            onDerive={generation.follow}
+            comparing={comparing}
+            onToggleCompare={onToggleCompare}
+          />
+        </>
       ) : (
         // Antes da primeira geração, o centro mostra a composição ao vivo em vez de
         // retângulos vazios: cada ajuste no inspetor tem resposta imediata aqui.

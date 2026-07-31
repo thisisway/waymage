@@ -177,6 +177,14 @@ export interface SceneVersion {
   createdBy: { id: string; name: string } | null;
 }
 
+export interface ProviderRun {
+  provider: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+  attempt: number;
+  errorCode: string | null;
+  latencyMs: number | null;
+}
+
 export interface GenerationResult {
   id: string;
   width: number;
@@ -218,6 +226,8 @@ export interface GenerationJob {
   sourceResultId: string | null;
   /** A imagem de origem, já resolvida — é o "antes" da comparação. */
   sourceResult: GenerationResult | null;
+  /** Tentativas contra provedores. Mais de uma significa que houve fallback. */
+  runs: ProviderRun[];
   status: string;
   statusLabel: string;
   progress: number;
@@ -231,6 +241,15 @@ export interface GenerationJob {
   results: GenerationResult[];
 }
 
+export interface ProviderAlternative {
+  provider: string;
+  eligible: boolean;
+  credits: number;
+  estimatedSeconds: number;
+  score: number;
+  notes: string[];
+}
+
 export interface Estimate {
   provider: string;
   credits: number;
@@ -241,6 +260,8 @@ export interface Estimate {
   warnings: { code: string; message: string }[];
   issues: { code: string; level: string; message: string }[];
   canGenerate: boolean;
+  /** Todos os provedores considerados, do melhor para o pior. */
+  alternatives: ProviderAlternative[];
 }
 
 export interface Wallet {

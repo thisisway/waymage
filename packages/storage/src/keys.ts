@@ -19,14 +19,23 @@ export const storageKeys = {
     return `workspaces/${workspaceId}/projects/${projectId}/masks/${maskId}.png`;
   },
 
+  /**
+   * Resultado de geração.
+   *
+   * A execução entra na chave, e não só o job: um job pode executar mais de uma vez — por
+   * retentativa da fila ou por fallback para outro provedor — e sem isso a segunda execução
+   * escreveria por cima da primeira e esbarraria na unicidade de `Asset.storageKey`, falhando
+   * um job que na verdade tinha dado certo.
+   */
   generationResult(
     workspaceId: string,
     projectId: string,
     jobId: string,
+    providerRunId: string,
     index: number,
     ext: string,
   ): string {
-    return `workspaces/${workspaceId}/projects/${projectId}/generations/${jobId}/${index}.${ext}`;
+    return `workspaces/${workspaceId}/projects/${projectId}/generations/${jobId}/${providerRunId}/${index}.${ext}`;
   },
 
   export(workspaceId: string, projectId: string, exportId: string, ext: string): string {

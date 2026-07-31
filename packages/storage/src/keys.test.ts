@@ -7,7 +7,7 @@ describe('chaves de storage', () => {
       storageKeys.assetOriginal('ws', 'pr', 'as', 'webp'),
       storageKeys.assetThumbnail('ws', 'pr', 'as'),
       storageKeys.mask('ws', 'pr', 'mk'),
-      storageKeys.generationResult('ws', 'pr', 'jb', 0, 'png'),
+      storageKeys.generationResult('ws', 'pr', 'jb', 'run', 0, 'png'),
       storageKeys.export('ws', 'pr', 'ex', 'zip'),
     ];
     for (const key of keys) {
@@ -16,9 +16,11 @@ describe('chaves de storage', () => {
     }
   });
 
-  it('separa resultados por índice dentro do job', () => {
-    expect(storageKeys.generationResult('w', 'p', 'j', 2, 'png')).toBe(
-      'workspaces/w/projects/p/generations/j/2.png',
+  it('separa resultados por execução e por índice dentro do job', () => {
+    // A execução no meio do caminho é o que permite a um job rodar duas vezes — retentativa
+    // ou fallback — sem a segunda sobrescrever a primeira.
+    expect(storageKeys.generationResult('w', 'p', 'j', 'r', 2, 'png')).toBe(
+      'workspaces/w/projects/p/generations/j/r/2.png',
     );
   });
 

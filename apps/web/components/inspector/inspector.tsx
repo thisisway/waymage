@@ -621,9 +621,10 @@ export function Inspector({
             value={spec.advanced.provider}
             options={[
               { value: 'auto', label: 'Automático' },
-              { value: 'fake', label: 'Fake (dev)' },
+              { value: 'fake-rapido', label: 'Rápido' },
+              { value: 'fake-estudio', label: 'Estúdio' },
             ]}
-            hint="Automático deixa o roteador escolher. Forçar um provedor é útil para comparar."
+            hint="Automático deixa o roteador pontuar e escolher. Forçar um provedor é útil para comparar a mesma cena entre dois."
             onChange={(v) => patch('advanced', { provider: v })}
           />
         </SectionCard>

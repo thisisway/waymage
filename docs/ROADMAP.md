@@ -1,7 +1,8 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 8 concluídas.** Próxima: Fase 9 (segundo provedor e roteamento) —
-primeira fase que exige chave de API real, e portanto autorização.
+Estado atual: **Fases 1 a 8 concluídas; Fase 9 parcial.** O roteamento, o fallback e a suíte
+de contrato estão prontos e verificados contra dois provedores fake de perfis diferentes. Os
+dois adapters reais dependem de chave de API e, portanto, de autorização.
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -179,15 +180,27 @@ nenhuma URL assinada.
 
 ---
 
-## ⬜ Fase 9 — Segundo provedor e roteamento
+## 🔜 Fase 9 — Segundo provedor e roteamento
 
-- [ ] Dois adapters reais atrás de `ImageProvider`
-- [ ] `ModelRouter` com scoring (capability 0.35 / qualidade 0.25 / custo 0.15 / latência 0.10 / confiabilidade 0.15)
-- [ ] Estimativa comparativa e fallback automático
-- [ ] Testes de contrato por adapter
-- [ ] Painel de execução (`ProviderRun`)
+- [x] `ModelRouter` com scoring (capability 0.35 / qualidade 0.25 / custo 0.15 / latência 0.10 / confiabilidade 0.15)
+- [x] Elegibilidade separada da pontuação (D-056)
+- [x] Confiabilidade calculada da última hora de `ProviderRun`
+- [x] Estimativa comparativa, com o motivo de cada descarte
+- [x] Fallback automático, com reserva complementada só quando a troca ocorre (D-058)
+- [x] Suíte de contrato rodando contra dois perfis (D-061)
+- [x] Painel de execução: tentativas visíveis quando houve troca de provedor
+- [ ] **Pendente:** dois adapters reais atrás de `ImageProvider`
 
-**Primeira fase que usa chave de API real.**
+**O que falta é a única parte que exige chave de API real — e portanto autorização.** Até lá,
+dois perfis fake (`fake-rapido` e `fake-estudio`) diferem em custo, latência, teto de saídas e
+capacidades, que é o que o roteador pesa.
+
+**Aceite (verificado):** `pnpm check` verde (238 testes); contra Postgres, Redis e MinIO — a
+estimativa lista os dois provedores com preço e motivo; ligar fundo transparente inverte a
+escolha e descarta `fake-rapido` com a justificativa; e um job com falha dirigida
+(`[[fail:fake-rapido]]`) cai para `fake-estudio`, grava as duas tentativas em `ProviderRun`,
+recompila o prompt para o segundo (sem negative prompt, dobrado no principal), completa a
+reserva de 1 para 3 e cobra 3 — carteira 100 → 97, nada preso em reserva.
 
 ---
 

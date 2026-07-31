@@ -5,9 +5,15 @@ import {
   GenerationStatus,
   OperationType,
   type Prisma,
+  type ProviderRunStatus,
 } from '@waymage/database';
 import { isTerminal, STATE_LABELS, STATE_PROGRESS, type GenerationState } from '@waymage/domain';
-import { FakeImageProvider } from '@waymage/provider-sdk';
+import {
+  ModelRouter,
+  PROVIDER_QUALITY,
+  createProviderRegistry,
+  type RoutingRequest,
+} from '@waymage/provider-sdk';
 import { promptCompiler } from '@waymage/prompt-compiler';
 import { hasBlockingIssues, parseSceneSpec, validateSceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
@@ -57,6 +63,32 @@ export interface GenerationJobView {
   createdAt: Date;
   completedAt: Date | null;
   results: GenerationResultView[];
+  /**
+   * Tentativas contra provedores, na ordem.
+   *
+   * Mais de uma significa que houve fallback. Sem isto o usuário veria só o provedor que
+   * entregou e não saberia que o primeiro falhou — nem por quê, quando o job demora o dobro.
+   */
+  runs: ProviderRunView[];
+}
+
+export interface ProviderRunView {
+  provider: string;
+  status: ProviderRunStatus;
+  attempt: number;
+  errorCode: string | null;
+  latencyMs: number | null;
+}
+
+export interface ProviderAlternative {
+  provider: string;
+  eligible: boolean;
+  credits: number;
+  estimatedSeconds: number;
+  /** 0..1 pelos pesos do blueprint §11.3. Só comparável entre elegíveis. */
+  score: number;
+  /** Por que foi descartado, ou o que pesou contra. */
+  notes: string[];
 }
 
 export interface EstimateView {
@@ -64,6 +96,8 @@ export interface EstimateView {
   credits: number;
   estimatedSeconds: number;
   count: number;
+  /** Todos os provedores considerados, do melhor para o pior. */
+  alternatives: ProviderAlternative[];
   summary: string;
   prompt: string;
   warnings: { code: string; message: string }[];
@@ -83,7 +117,14 @@ export class GenerationsService {
    * fake que o worker usa. O importante é que a validação já receba capabilities reais —
    * aceitar um job que o provedor não consegue executar é a pior hora de descobrir.
    */
-  private readonly defaultProvider = new FakeImageProvider();
+  /**
+   * O mesmo conjunto que o worker executa.
+   *
+   * Estimar sobre uma lista e gerar com outra produziria um número que não corresponde a
+   * nada — e a diferença só apareceria depois, na cobrança.
+   */
+  private readonly registry = createProviderRegistry();
+  private readonly router = new ModelRouter(this.registry);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -95,34 +136,69 @@ export class GenerationsService {
   ) {}
 
   /** Prévia do que vai acontecer, antes de gastar qualquer coisa (blueprint §22). */
+  /**
+   * O provedor que vencer a pontuação, ou erro claro se nenhum atende.
+   *
+   * A escolha acontece aqui, na criação, e não só no worker: é o custo dela que vira a
+   * reserva de crédito. Rotear apenas na execução deixaria o usuário ver um preço e pagar
+   * outro.
+   */
+  private async route(request: RoutingRequest) {
+    const ranked = await this.router.rank(request, { quality: PROVIDER_QUALITY });
+    const best = ranked.find((entry) => entry.eligible);
+
+    if (!best) {
+      throw new AppError(
+        'NO_ELIGIBLE_PROVIDER',
+        'Nenhum provedor atende a esta cena.',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        { alternatives: ranked.map((entry) => ({ provider: entry.provider, notes: entry.notes })) },
+      );
+    }
+
+    return best;
+  }
+
   async estimate(principal: RequestPrincipal, input: EstimateInput): Promise<EstimateView> {
     const scene = await this.scenes.get(principal, input.sceneId);
-    const capabilities = this.defaultProvider.getCapabilities();
-
-    const issues = validateSceneSpec(scene.sceneSpec, { capabilities });
     const mode = scene.sceneSpec.output.quality === 'final' ? 'final' : 'draft';
+
+    // Roteia antes de compilar: o prompt depende das capacidades de quem vai receber,
+    // porque provedor sem negative prompt recebe as restrições dentro do prompt principal.
+    const ranked = await this.router.rank(routingFor(scene.sceneSpec, mode), {
+      quality: PROVIDER_QUALITY,
+    });
+    const chosen = ranked.find((entry) => entry.eligible) ?? ranked[0];
+    const provider = chosen ? this.registry.get(chosen.provider) : null;
+    const capabilities = provider?.getCapabilities();
+
+    const issues = validateSceneSpec(scene.sceneSpec, capabilities ? { capabilities } : {});
 
     const compilation = await promptCompiler.compile({
       sceneSpec: scene.sceneSpec,
-      providerCapabilities: capabilities,
-      mode,
-    });
-
-    const cost = await this.defaultProvider.estimateCost({
-      requestId: 'estimate',
-      prompt: compilation.prompt,
-      references: [],
-      aspectRatio: scene.sceneSpec.output.aspectRatio,
-      format: scene.sceneSpec.output.format,
-      count: scene.sceneSpec.output.count,
+      providerCapabilities: capabilities ?? this.registry.all()[0]!.getCapabilities(),
       mode,
     });
 
     return {
-      provider: this.defaultProvider.id,
-      credits: cost.credits,
-      estimatedSeconds: Math.ceil((cost.estimatedLatencyMs * scene.sceneSpec.output.count) / 1000),
+      provider: chosen?.provider ?? 'nenhum',
+      credits: chosen?.credits ?? 0,
+      estimatedSeconds: Math.ceil(
+        ((chosen?.estimatedLatencyMs ?? 0) * scene.sceneSpec.output.count) / 1000,
+      ),
       count: scene.sceneSpec.output.count,
+      // A alternativa descartada também aparece, com o motivo: "por que não usou o de
+      // qualidade melhor" é a primeira pergunta de quem vê o número.
+      alternatives: ranked.map((entry) => ({
+        provider: entry.provider,
+        eligible: entry.eligible,
+        credits: entry.credits,
+        estimatedSeconds: Math.ceil(
+          (entry.estimatedLatencyMs * scene.sceneSpec.output.count) / 1000,
+        ),
+        score: Math.round(entry.score * 100) / 100,
+        notes: entry.notes,
+      })),
       summary: compilation.summary,
       prompt: compilation.prompt,
       warnings: compilation.warnings,
@@ -131,7 +207,7 @@ export class GenerationsService {
         level: issue.level,
         message: issue.message,
       })),
-      canGenerate: !hasBlockingIssues(issues),
+      canGenerate: Boolean(chosen?.eligible) && !hasBlockingIssues(issues),
     };
   }
 
@@ -163,8 +239,12 @@ export class GenerationsService {
     if (existing) return this.get(principal, existing.id);
 
     const scene = await this.scenes.get(principal, input.sceneId);
-    const capabilities = this.defaultProvider.getCapabilities();
-    const issues = validateSceneSpec(scene.sceneSpec, { capabilities });
+    const mode = scene.sceneSpec.output.quality === 'final' ? 'final' : 'draft';
+
+    const chosen = await this.route(routingFor(scene.sceneSpec, mode));
+    const issues = validateSceneSpec(scene.sceneSpec, {
+      capabilities: this.registry.get(chosen.provider).getCapabilities(),
+    });
 
     if (hasBlockingIssues(issues)) {
       throw new AppError(
@@ -183,17 +263,6 @@ export class GenerationsService {
       requestId,
     );
 
-    const mode = scene.sceneSpec.output.quality === 'final' ? 'final' : 'draft';
-    const cost = await this.defaultProvider.estimateCost({
-      requestId: requestId ?? 'create',
-      prompt: '',
-      references: [],
-      aspectRatio: scene.sceneSpec.output.aspectRatio,
-      format: scene.sceneSpec.output.format,
-      count: scene.sceneSpec.output.count,
-      mode,
-    });
-
     const job = await this.prisma.generationJob.create({
       data: {
         workspaceId: principal.workspaceId,
@@ -204,7 +273,7 @@ export class GenerationsService {
         operationType: input.operationType ?? OperationType.TEXT_TO_IMAGE,
         requestedCount: scene.sceneSpec.output.count,
         providerStrategy: scene.sceneSpec.advanced.provider,
-        estimatedCredits: cost.credits,
+        estimatedCredits: chosen.credits,
         reservedCredits: 0,
         idempotencyKey,
         createdById: principal.user.id,
@@ -217,7 +286,7 @@ export class GenerationsService {
     try {
       await this.billing.reserve({
         workspaceId: principal.workspaceId,
-        amount: cost.credits,
+        amount: chosen.credits,
         generationJobId: job.id,
       });
     } catch (error) {
@@ -236,7 +305,7 @@ export class GenerationsService {
 
     await this.prisma.generationJob.update({
       where: { id: job.id },
-      data: { reservedCredits: cost.credits },
+      data: { reservedCredits: chosen.credits },
     });
 
     await this.queue.enqueue({
@@ -367,12 +436,9 @@ export class GenerationsService {
             ? ('final' as const)
             : ('draft' as const);
 
-    const cost = await this.defaultProvider.estimateCost({
-      requestId: requestId ?? 'derive',
-      prompt: '',
-      references: [],
-      aspectRatio: spec.output.aspectRatio,
-      format: spec.output.format,
+    const chosen = await this.route({
+      ...routingFor(spec, mode === 'edit' ? 'final' : mode),
+      operation,
       count,
       mode,
     });
@@ -389,7 +455,7 @@ export class GenerationsService {
         operationType: operation as OperationType,
         requestedCount: count,
         providerStrategy: source.job.providerStrategy,
-        estimatedCredits: cost.credits,
+        estimatedCredits: chosen.credits,
         reservedCredits: 0,
         idempotencyKey,
         createdById: principal.user.id,
@@ -425,7 +491,7 @@ export class GenerationsService {
     try {
       await this.billing.reserve({
         workspaceId: principal.workspaceId,
-        amount: cost.credits,
+        amount: chosen.credits,
         generationJobId: job.id,
       });
     } catch (error) {
@@ -443,7 +509,7 @@ export class GenerationsService {
 
     await this.prisma.generationJob.update({
       where: { id: job.id },
-      data: { reservedCredits: cost.credits },
+      data: { reservedCredits: chosen.credits },
     });
 
     await this.queue.enqueue({
@@ -495,6 +561,7 @@ export class GenerationsService {
       completedAt: job.completedAt,
       results: await Promise.all(job.results.map((result) => this.toResultView(result))),
       sourceResult: job.sourceResult ? await this.toResultView(job.sourceResult) : null,
+      runs: job.providerRuns,
     };
   }
 
@@ -634,6 +701,24 @@ export class GenerationsService {
   }
 }
 
+/** Traduz a cena para a pergunta que o roteador responde. */
+function routingFor(
+  spec: ReturnType<typeof parseSceneSpec>,
+  mode: 'draft' | 'final',
+): RoutingRequest {
+  return {
+    operation: 'TEXT_TO_IMAGE',
+    aspectRatio: spec.output.aspectRatio,
+    format: spec.output.format,
+    count: spec.output.count,
+    mode,
+    referenceCount: spec.references.length,
+    transparentBackground: spec.output.transparentBackground,
+    needsSeed: spec.advanced.seed !== null,
+    needsNegativePrompt: Boolean(spec.advanced.negativePrompt),
+  };
+}
+
 const resultSelect = {
   id: true,
   width: true,
@@ -662,4 +747,8 @@ const jobSelect = {
   createdAt: true,
   completedAt: true,
   results: { orderBy: { createdAt: 'asc' }, select: resultSelect },
+  providerRuns: {
+    orderBy: { attempt: 'asc' },
+    select: { provider: true, status: true, attempt: true, errorCode: true, latencyMs: true },
+  },
 } as const satisfies Prisma.GenerationJobSelect;

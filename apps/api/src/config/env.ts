@@ -34,8 +34,6 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
-  IMAGE_PROVIDER_DEFAULT: z.string().min(1).default('fake'),
-
   // Segredo de assinatura do access token. Mínimo de 32 caracteres: chave curta em HMAC é
   // forçável offline, e o token assinado é o que autoriza toda a API.
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET precisa de ao menos 32 caracteres.'),
