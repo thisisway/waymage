@@ -1,6 +1,7 @@
 import { AssetKind, AssetStatus, ExportStatus, type PrismaClient } from '@waymage/database';
 import { exportJobPayloadSchema } from '@waymage/domain';
 import { type StorageService, storageKeys } from '@waymage/storage';
+import { recordDecision } from './moderation';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { Logger } from 'pino';
 import sharp from 'sharp';
@@ -64,6 +65,7 @@ export async function processExportJob(
       where: { id: { in: exportJob.resultIds }, workspaceId: payload.workspaceId },
       select: {
         id: true,
+        safetyStatus: true,
         asset: { select: { storageKey: true, projectId: true } },
       },
     });
@@ -76,6 +78,22 @@ export async function processExportJob(
     for (const [index, resultId] of exportJob.resultIds.entries()) {
       const result = byId.get(resultId);
       if (!result?.asset?.projectId) continue;
+
+      /**
+       * Exportar é o momento em que a imagem sai daqui.
+       *
+       * O veredicto já foi dado na geração e vive no resultado; aqui ele é aplicado. Pular
+       * em silêncio entregaria um pacote com arquivos faltando e nenhuma explicação, então a
+       * exportação inteira falha — quem pediu precisa saber qual imagem não pode sair.
+       */
+      if (result.safetyStatus !== 'ALLOW' && result.safetyStatus !== 'ALLOW_WITH_WARNING') {
+        await recordDecision(prisma, {
+          workspaceId: payload.workspaceId,
+          target: 'EXPORT',
+          result: { verdict: result.safetyStatus, categories: ['blocked_source'] },
+        });
+        throw new Error('Uma das imagens está retida pela moderação e não pode ser exportada.');
+      }
 
       const original = await storage.getObject(result.asset.storageKey);
       // Sem `withMetadata()`: a exportação também não deve carregar metadados.

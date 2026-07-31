@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   GenerationProgressBar,
   GenerationSummary,
+  ModerationNotes,
   ProviderAttempts,
   ResultsGrid,
 } from '../../../components/generation-panel';
@@ -357,6 +358,7 @@ function Canvas({
         <ResultCompare results={results} selectedIds={comparing} onClose={onClearCompare} />
       ) : results.length > 0 ? (
         <>
+          <ModerationNotes job={generation.job} />
           <ProviderAttempts job={generation.job} />
           <ResultsGrid
             job={generation.job}

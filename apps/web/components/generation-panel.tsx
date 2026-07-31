@@ -149,6 +149,32 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
 }
 
 /**
+ * Ressalvas da moderação.
+ *
+ * Aparece junto do resultado, e não como toast: um aviso sobre semelhança com pessoa real
+ * continua valendo depois que a imagem existe, e um aviso que some sozinho seria como não
+ * ter avisado.
+ */
+export function ModerationNotes({ job }: { job: GenerationJob | null }) {
+  const notes = (job?.moderation ?? []).filter((note) => note.reason);
+  if (notes.length === 0) return null;
+
+  return (
+    <ul className="animate-rise mx-auto w-full max-w-2xl space-y-1.5">
+      {notes.map((note, index) => (
+        <li
+          key={`${note.target}-${index}`}
+          className="flex gap-2 rounded-lg border border-state-warn/30 bg-state-warn/[0.06] px-3 py-2 text-micro leading-relaxed text-ink-secondary"
+        >
+          <Icon name="warning" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-state-warn" />
+          <span>{note.reason}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * Tentativas contra provedores.
  *
  * Só aparece quando houve mais de uma: no caminho feliz o provedor já está no resumo, e uma

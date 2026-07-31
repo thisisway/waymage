@@ -1,5 +1,6 @@
 import { AssetStatus, type PrismaClient } from '@waymage/database';
 import { assetJobPayloadSchema, detectImageType, SIGNATURE_BYTES } from '@waymage/domain';
+import { isBlocking, moderateImage, recordDecision } from './moderation';
 import { type StorageService, storageKeys } from '@waymage/storage';
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
@@ -51,8 +52,36 @@ export async function processAssetJob(
 
     // Segunda checagem de assinatura. A primeira foi na API, mas entre uma e outra o objeto
     // poderia ter sido substituído por quem tivesse a URL assinada ainda válida.
-    if (!detectImageType(original.subarray(0, SIGNATURE_BYTES))) {
+    const detected = detectImageType(original.subarray(0, SIGNATURE_BYTES));
+    if (!detected) {
       throw new Error('Conteúdo não é uma imagem suportada');
+    }
+
+    /**
+     * Moderação da referência, antes de gerar miniatura.
+     *
+     * Antes da miniatura de propósito: uma imagem recusada não deve ganhar uma versão menor
+     * dela mesma servida pela biblioteca enquanto ninguém olha.
+     */
+    const verdict = moderateImage({ bytes: original, mimeType: detected });
+    await recordDecision(prisma, {
+      workspaceId: asset.workspaceId,
+      target: 'REFERENCE_IMAGE',
+      result: verdict,
+      assetId: asset.id,
+    });
+
+    if (isBlocking(verdict.verdict)) {
+      await storage.delete(asset.storageKey).catch(() => undefined);
+      await prisma.asset.update({
+        where: { id: asset.id },
+        data: {
+          status: AssetStatus.QUARANTINED,
+          analysis: { moderation: verdict.categories },
+        },
+      });
+      log.warn({ categories: verdict.categories }, 'Referência em quarentena');
+      return { width: 0, height: 0 };
     }
 
     const image = sharp(original, { failOn: 'error' });

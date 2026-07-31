@@ -39,14 +39,6 @@ export interface RoutingRequest {
   needsSeed: boolean;
   /** A cena tem restrições negativas a comunicar? */
   needsNegativePrompt: boolean;
-  /**
-   * Teto de créditos, quando já existe reserva.
-   *
-   * A API roteia ao criar o job e reserva o custo de quem venceu. O worker roteia de novo,
-   * com dados de confiabilidade mais frescos — e sem este teto poderia escolher um provedor
-   * mais caro do que o usuário viu na estimativa. Preço combinado é preço cobrado.
-   */
-  maxCredits?: number;
 }
 
 export interface RoutingContext {
@@ -121,19 +113,11 @@ export class ModelRouter {
           mode: request.mode,
         });
 
-        const overBudget =
-          request.maxCredits !== undefined && estimate.credits > request.maxCredits;
-        if (overBudget) {
-          notes.push(
-            `custa ${estimate.credits} créditos, acima dos ${request.maxCredits} reservados`,
-          );
-        }
-
         return {
           provider,
           capabilities,
           notes,
-          eligible: !unavailable && !overBudget && blocking.length === 0,
+          eligible: !unavailable && blocking.length === 0,
           credits: estimate.credits,
           latencyMs: estimate.estimatedLatencyMs,
         };

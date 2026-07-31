@@ -1078,6 +1078,84 @@ e verificavel sem chamar o fornecedor, e um teste que precisa de chave paga nao 
 
 ---
 
+## D-062 — Quatro veredictos, porque "pode ou nao pode" e uma pergunta pobre
+
+**Status:** aceita (Fase 10)
+
+- `ALLOW` — segue sem ressalva.
+- `ALLOW_WITH_WARNING` — segue, e quem pediu precisa saber de algo. Semelhanca com pessoa real
+  e marca de terceiro entram aqui: sao legitimos, mas a responsabilidade e de quem pede, e o
+  aviso e o que torna essa responsabilidade explicita.
+- `REVIEW_REQUIRED` — nem passa nem e recusado por uma lista de palavras. "Crianca" e
+  "sensual" na mesma cena podem ser uma foto de aniversario mal descrita ou algo muito pior, e
+  a diferenca nao esta no texto.
+- `BLOCK` — recusa imediata.
+
+As regras sao uma tabela de termos, nao um classificador, e estao marcadas como tal no codigo.
+Uma lista nao entende contexto, idioma nem intencao. Isto **nao e seguranca** — existe para
+que os quatro veredictos sejam reais no pipeline e para que trocar por um servico externo seja
+substituir `moderateText` e `moderateImage`, nao reescrever o worker.
+
+A ordem das regras vai do mais grave para o menos: um pedido que aciona duas categorias e
+tratado pela pior, senao um aviso brando encobriria um bloqueio.
+
+---
+
+## D-063 — Barrado por nos e barrado pelo fornecedor sao coisas diferentes
+
+**Status:** aceita (Fase 10)
+
+`ProviderError` ganhou a especie `moderation`, separada de `content_policy`. A diferenca e
+dinheiro: quando o fornecedor recusa, a chamada ja saiu e o custo foi incorrido, entao a
+reserva e capturada. Quando a nossa moderacao barra, nenhuma chamada saiu — cobrar por isso
+seria vender nada.
+
+Ate aqui um prompt bloqueado localmente era cobrado, porque reusava `content_policy`.
+
+`moderation` tambem nao aciona fallback. O laco de candidatos passou a decidir por
+`shouldTryNextProvider` (transitorio, timeout, cota, indisponivel) em vez de "e reembolsavel":
+recusa por politica e pedido invalido seriam recusados igual pelo proximo, cobrando uma
+segunda chamada por isso.
+
+---
+
+## D-064 — Decisao registrada so quando ha decisao
+
+**Status:** aceita (Fase 10)
+
+`ModerationDecision` recebe linha quando o veredicto nao e `ALLOW`. Uma linha por permissao
+seria uma linha dizendo que nada aconteceu, multiplicada por cada imagem de cada job.
+
+Que o conteudo passou ja esta dito pelo job ter avancado pelos estados `MODERATING_INPUT` e
+`MODERATING_OUTPUT`, que sao obrigatorios e validados pela maquina de estados.
+
+O veredicto por imagem vive em `GenerationResult.safetyStatus`: e atributo da imagem,
+consultado toda vez que ela e exibida ou exportada, e nao um evento de auditoria.
+
+O texto avaliado nunca entra no registro. Guardar o pedido rejeitado transformaria a tabela de
+auditoria num arquivo do proprio conteudo que se quis recusar. So as categorias acionadas e a
+mensagem que nos escrevemos.
+
+---
+
+## D-065 — Modera o texto do usuario E o prompt compilado
+
+**Status:** aceita (Fase 10)
+
+Nao e redundancia. O compilador junta campos que, isolados, nao acionam nada — o sujeito de um
+lado, o cenario do outro — e o texto final e o que o fornecedor realmente recebe. E esse texto
+que precisa estar dentro da politica.
+
+Na entrada, passaram a ser lidos todos os campos livres: descricao do sujeito, roupa, local,
+mensagem, publico, negative prompt e instrucao de edicao. O negative prompt escapava — campo
+escrito a mao que vai inteiro para o fornecedor.
+
+Na tela, avisos identicos sao mostrados uma vez so: os dois alvos acionam a mesma regra quase
+sempre, e a frase repetida faria o aviso parecer defeito. O registro completo, com o alvo de
+cada decisao, continua em `ModerationDecision`.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

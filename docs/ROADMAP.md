@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 8 concluídas; Fase 9 parcial.** O roteamento, o fallback e a suíte
+Estado atual: **Fases 1 a 8 concluídas; Fases 9 e 10 parciais.** O roteamento, o fallback e a suíte
 de contrato estão prontos e verificados contra dois provedores fake de perfis diferentes. Os
 dois adapters reais dependem de chave de API e, portanto, de autorização.
 
@@ -204,13 +204,22 @@ reserva de 1 para 3 e cobra 3 — carteira 100 → 97, nada preso em reserva.
 
 ---
 
-## ⬜ Fase 10 — Moderação, consentimento, auditoria e admin
+## 🔜 Fase 10 — Moderação, consentimento, auditoria e admin
 
-- [ ] Moderação de texto, referências, prompt compilado, imagem final e exportação
-- [ ] Decisões `ALLOW` / `ALLOW_WITH_WARNING` / `REVIEW_REQUIRED` / `BLOCK`
-- [ ] `ConsentRecord` para pessoas reais, com revogação
-- [ ] Política de retenção e exclusão
-- [ ] Painel administrativo
+- [x] Moderação nos cinco pontos: texto, referência, prompt compilado, imagem final, exportação
+- [x] Decisões `ALLOW` / `ALLOW_WITH_WARNING` / `REVIEW_REQUIRED` / `BLOCK` (D-062)
+- [x] Barrado por nós devolve o crédito; barrado pelo fornecedor não (D-063)
+- [x] Ressalvas visíveis na tela junto do resultado
+- [ ] **Pendente:** `ConsentRecord` para pessoas reais, com revogação
+- [ ] **Pendente:** política de retenção e exclusão
+- [ ] **Pendente:** painel administrativo — sem ele, `REVIEW_REQUIRED` falha o job em vez de
+      entrar numa fila, porque não existe quem revise
+
+**Aceite (verificado):** `pnpm check` verde (247 testes); contra Postgres, Redis e MinIO, as
+quatro cenas — `BLOCK`, `REVIEW_REQUIRED`, `ALLOW_WITH_WARNING` e `ALLOW` — produzem
+respectivamente falha com crédito devolvido (100 → 100), falha com crédito devolvido,
+conclusão com aviso na tela e cobrança, e conclusão silenciosa. Só as três primeiras gravam
+`ModerationDecision`.
 
 ---
 

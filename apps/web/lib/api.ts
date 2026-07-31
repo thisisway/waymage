@@ -185,6 +185,12 @@ export interface ProviderRun {
   latencyMs: number | null;
 }
 
+export interface ModerationNote {
+  target: string;
+  verdict: 'ALLOW' | 'ALLOW_WITH_WARNING' | 'REVIEW_REQUIRED' | 'BLOCK';
+  reason: string | null;
+}
+
 export interface GenerationResult {
   id: string;
   width: number;
@@ -228,6 +234,8 @@ export interface GenerationJob {
   sourceResult: GenerationResult | null;
   /** Tentativas contra provedores. Mais de uma significa que houve fallback. */
   runs: ProviderRun[];
+  /** Ressalvas da moderação. Só o que não foi permitido sem observação. */
+  moderation: ModerationNote[];
   status: string;
   statusLabel: string;
   progress: number;

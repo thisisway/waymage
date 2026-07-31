@@ -4,6 +4,8 @@ import {
   AssetStatus,
   GenerationStatus,
   OperationType,
+  type ModerationTarget,
+  type ModerationVerdict,
   type Prisma,
   type ProviderRunStatus,
 } from '@waymage/database';
@@ -70,6 +72,19 @@ export interface GenerationJobView {
    * entregou e não saberia que o primeiro falhou — nem por quê, quando o job demora o dobro.
    */
   runs: ProviderRunView[];
+  /**
+   * Ressalvas da moderação.
+   *
+   * Só o que não foi `ALLOW` chega aqui — é o que faz `ALLOW_WITH_WARNING` significar algo
+   * para quem pediu. Sem isto, "permitido com aviso" seria idêntico a "permitido".
+   */
+  moderation: ModerationNoteView[];
+}
+
+export interface ModerationNoteView {
+  target: ModerationTarget;
+  verdict: ModerationVerdict;
+  reason: string | null;
 }
 
 export interface ProviderRunView {
@@ -562,6 +577,19 @@ export class GenerationsService {
       results: await Promise.all(job.results.map((result) => this.toResultView(result))),
       sourceResult: job.sourceResult ? await this.toResultView(job.sourceResult) : null,
       runs: job.providerRuns,
+      moderation: dedupeNotes(
+        job.moderation.map((decision) => ({
+          target: decision.target,
+          verdict: decision.verdict,
+          reason:
+            typeof decision.detail === 'object' &&
+            decision.detail !== null &&
+            'reason' in decision.detail &&
+            typeof decision.detail.reason === 'string'
+              ? decision.detail.reason
+              : null,
+        })),
+      ),
     };
   }
 
@@ -701,6 +729,24 @@ export class GenerationsService {
   }
 }
 
+/**
+ * Um aviso por assunto, mesmo que a regra tenha batido em mais de um alvo.
+ *
+ * Texto do usuário e prompt compilado acionam a mesma regra quase sempre — o compilador
+ * carrega a descrição para dentro do prompt. Mostrar a mesma frase duas vezes faria o aviso
+ * parecer defeito, e a segunda ocorrência não acrescenta nada: o registro completo continua
+ * em `ModerationDecision`, com o alvo de cada uma.
+ */
+function dedupeNotes(notes: ModerationNoteView[]): ModerationNoteView[] {
+  const seen = new Set<string>();
+  return notes.filter((note) => {
+    const key = `${note.verdict}:${note.reason ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Traduz a cena para a pergunta que o roteador responde. */
 function routingFor(
   spec: ReturnType<typeof parseSceneSpec>,
@@ -750,5 +796,9 @@ const jobSelect = {
   providerRuns: {
     orderBy: { attempt: 'asc' },
     select: { provider: true, status: true, attempt: true, errorCode: true, latencyMs: true },
+  },
+  moderation: {
+    orderBy: { createdAt: 'asc' },
+    select: { target: true, verdict: true, detail: true },
   },
 } as const satisfies Prisma.GenerationJobSelect;

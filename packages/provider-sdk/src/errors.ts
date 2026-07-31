@@ -11,6 +11,14 @@ export type ProviderErrorKind =
   | 'timeout'
   /** Rejeitado por política de conteúdo — não tentar de novo. */
   | 'content_policy'
+  /**
+   * Barrado pela NOSSA moderação, antes de qualquer submissão.
+   *
+   * Separado de `content_policy` por causa do dinheiro: ali o fornecedor recusou depois de
+   * cobrar, aqui nenhuma chamada saiu. Cobrar por um pedido que o próprio sistema barrou
+   * seria vender nada.
+   */
+  | 'moderation'
   /** Requisição inválida (nossa culpa) — não tentar de novo. */
   | 'invalid_request'
   /** Cota ou rate limit do provedor. */
@@ -45,5 +53,10 @@ export class ProviderError extends Error {
    */
   get refundable(): boolean {
     return this.kind !== 'content_policy';
+  }
+
+  /** Vale tentar o próximo candidato do roteador? */
+  get shouldTryNextProvider(): boolean {
+    return this.retryable || this.failoverable;
   }
 }

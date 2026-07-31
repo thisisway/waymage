@@ -30,7 +30,7 @@ import type { Logger } from 'pino';
 import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
-import { moderate } from './moderation';
+import { isBlocking, moderateImage, moderateText, recordDecision } from './moderation';
 import { recentReliability, resolveCandidates, routingContext } from './providers';
 import { runProviderJob } from './run-provider-job';
 
@@ -142,11 +142,38 @@ export async function processGenerationJob(
     const candidates = await resolveCandidates(record.providerStrategy, routing, context);
 
     await advance('VALIDATING', 'MODERATING_INPUT');
-    const inputVerdict = moderate({ text: spec.subject.description + ' ' + spec.scene.location });
-    if (inputVerdict.verdict === 'BLOCK') {
+
+    /**
+     * Modera tudo que o usuário escreveu, não só a descrição do sujeito.
+     *
+     * Antes só `description` e `location` eram olhados, e o negative prompt — campo livre,
+     * escrito à mão, que vai inteiro para o provedor — passava sem ser lido.
+     */
+    const inputVerdict = moderateText(
+      [
+        spec.subject.description,
+        spec.subject.wardrobe?.description,
+        spec.scene.location,
+        spec.intent.message,
+        spec.intent.targetAudience,
+        spec.advanced.negativePrompt,
+        record.editOperation?.instruction,
+      ]
+        .filter(Boolean)
+        .join(' \n '),
+    );
+
+    await recordDecision(prisma, {
+      workspaceId: payload.workspaceId,
+      target: 'PROMPT_TEXT',
+      result: inputVerdict,
+      generationJobId: record.id,
+    });
+
+    if (isBlocking(inputVerdict.verdict)) {
       throw new ProviderError(
-        'content_policy',
-        'INPUT_BLOCKED',
+        'moderation',
+        inputVerdict.verdict === 'BLOCK' ? 'INPUT_BLOCKED' : 'REVIEW_REQUIRED',
         inputVerdict.reason ?? 'Conteúdo da cena rejeitado.',
       );
     }
@@ -236,6 +263,32 @@ export async function processGenerationJob(
         mode,
         ...(record.editOperation ? { editInstruction: record.editOperation.instruction } : {}),
       });
+
+      /**
+       * O prompt compilado passa pela moderação de novo.
+       *
+       * Não é redundância: o compilador junta campos que, isolados, não acionam nada — o
+       * sujeito de um lado, o cenário do outro — e o texto final é o que o fornecedor
+       * realmente recebe. É esse texto que precisa estar dentro da política.
+       */
+      const promptVerdict = moderateText(
+        `${compilation.prompt} ${compilation.negativePrompt ?? ''}`,
+      );
+
+      await recordDecision(prisma, {
+        workspaceId: payload.workspaceId,
+        target: 'COMPILED_PROMPT',
+        result: promptVerdict,
+        generationJobId: record.id,
+      });
+
+      if (isBlocking(promptVerdict.verdict)) {
+        throw new ProviderError(
+          'moderation',
+          promptVerdict.verdict === 'BLOCK' ? 'PROMPT_BLOCKED' : 'REVIEW_REQUIRED',
+          promptVerdict.reason ?? 'Prompt rejeitado pela política de conteúdo.',
+        );
+      }
 
       // Nunca guardar so o prompt: SceneSpec normalizado, versao do compilador e avisos
       // ficam junto, senao nao ha como explicar por que uma imagem saiu como saiu.
@@ -386,7 +439,10 @@ export async function processGenerationJob(
       } catch (error) {
         const failure = error instanceof ProviderError ? error : null;
         const last = index + 1 >= attempts.length;
-        if (last || !(failure?.refundable ?? true)) throw error;
+
+        // Trocar de fornecedor só resolve falha DELE. Recusa por política e pedido inválido
+        // seriam recusados igual pelo próximo, cobrando uma segunda chamada por isso.
+        if (last || !(failure?.shouldTryNextProvider ?? false)) throw error;
 
         log.warn(
           { provider: candidate.id, next: attempts[index + 1]?.id, code: failure?.code },
@@ -422,8 +478,35 @@ export async function processGenerationJob(
     }
 
     await advance('DOWNLOADING', 'MODERATING_OUTPUT');
-    // Moderação de saída real entra na Fase 10; o passo existe para o pipeline já ter o
-    // ponto de inserção e o estado correspondente.
+
+    /**
+     * Moderação da imagem produzida.
+     *
+     * O veredicto por imagem vive em `GenerationResult.safetyStatus`, e não numa linha de
+     * decisão por resultado: é atributo da imagem, consultado sempre que ela é exibida ou
+     * exportada. A linha de decisão só existe quando há algo a registrar.
+     */
+    for (const [index, result] of stored.entries()) {
+      const image = status.images[index];
+      if (!image) continue;
+
+      const verdict = moderateImage({ bytes: image.data, mimeType: image.mimeType });
+      if (verdict.verdict === 'ALLOW') continue;
+
+      await prisma.generationResult.update({
+        where: { id: result.id },
+        data: { safetyStatus: verdict.verdict },
+      });
+
+      await recordDecision(prisma, {
+        workspaceId: payload.workspaceId,
+        target: 'OUTPUT_IMAGE',
+        result: verdict,
+        generationJobId: record.id,
+        assetId: result.assetId,
+      });
+    }
+
     await advance('MODERATING_OUTPUT', 'EVALUATING');
 
     await Promise.all(
