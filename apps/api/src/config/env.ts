@@ -38,6 +38,16 @@ const envSchema = z.object({
   // forçável offline, e o token assinado é o que autoriza toda a API.
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET precisa de ao menos 32 caracteres.'),
 
+  /**
+   * `SameSite` dos cookies de sessão.
+   *
+   * `lax` serve quando web e API compartilham o site registrável (`app.dominio.com` e
+   * `api.dominio.com`). Use `none` quando não compartilham — inclusive nos domínios padrão
+   * do EasyPanel, porque `easypanel.host` está na Public Suffix List e cada subdomínio conta
+   * como um site distinto. `none` exige HTTPS nas duas pontas.
+   */
+  COOKIE_SAMESITE: z.enum(['lax', 'none']).default('lax'),
+
   /** Necessário atrás de reverse proxy, senão todo request parece vir do IP do proxy. */
   TRUST_PROXY: z
     .enum(['true', 'false'])

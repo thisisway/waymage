@@ -1156,6 +1156,30 @@ cada decisao, continua em `ModerationDecision`.
 
 ---
 
+## D-066 — SameSite dos cookies vira configuracao, por causa da Public Suffix List
+
+**Status:** aceita (preparacao de deploy)
+
+`easypanel.host` esta na Public Suffix List. Isso faz `waymage-web.easypanel.host` e
+`waymage-api.easypanel.host` serem **sites diferentes** para o browser — nao subdominios do
+mesmo site —, e com `SameSite=Lax` o cookie de sessao nao acompanha o `fetch`.
+
+O sintoma engana: o login responde 200, o `Set-Cookie` e aceito, e todo request seguinte volta 401. Passa facil por bug de autenticacao.
+
+Por isso `COOKIE_SAMESITE` entrou como variavel de ambiente, com `lax` de padrao — o mais
+restritivo que funciona — e `none` como excecao declarada por quem conhece a topologia do
+deploy. `none` liga `Secure` automaticamente, que o browser exige.
+
+A alternativa era fixar `none` sempre. Recusada: em dominio proprio com `app.` e `api.` na
+mesma raiz, `lax` funciona e protege mais, e nao ha razao para abrir mao disso em toda
+instalacao por causa de uma.
+
+O caso ambiguo esta documentado em [docs/DEPLOY.md](DEPLOY.md): se as duas URLs geradas
+compartilharem um rotulo antes de `easypanel.host`, elas voltam a ser o mesmo site e `lax`
+serve. E a URL real que decide, nao a suposicao.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

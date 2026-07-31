@@ -19,12 +19,26 @@ export const COOKIE = {
 
 export const CSRF_HEADER = 'x-csrf-token';
 
-/** `Secure` só fora de desenvolvimento: em http://localhost o browser descartaria o cookie. */
-const secure = env.NODE_ENV === 'production';
+/**
+ * `SameSite` depende de web e API compartilharem o site registrável — e isso não é o mesmo
+ * que compartilhar o domínio.
+ *
+ * `easypanel.host` está na Public Suffix List, então `waymage-web.easypanel.host` e
+ * `waymage-api.easypanel.host` são **sites diferentes** para o browser, e `lax` faria o
+ * cookie não ser enviado no fetch. O sintoma é traiçoeiro: o login responde 200, e todo
+ * request seguinte volta 401.
+ *
+ * `lax` continua o padrão porque é o mais restritivo que funciona; `none` é a exceção
+ * declarada por quem conhece a topologia do deploy, e obriga `Secure`.
+ */
+const crossSite = env.COOKIE_SAMESITE === 'none';
+
+/** `Secure` fora de desenvolvimento — e sempre que `SameSite=None`, que o browser exige. */
+const secure = env.NODE_ENV === 'production' || crossSite;
 
 const base: CookieSerializeOptions = {
   path: '/',
-  sameSite: 'lax',
+  sameSite: env.COOKIE_SAMESITE,
   secure,
 };
 

@@ -75,8 +75,9 @@ progresso em tempo real — sem nenhuma chave de API.
 
 ## Deploy
 
-Alvo: **EasyPanel** ([D-019](docs/DECISIONS.md#d-019)). Há um Dockerfile por app, todos
-buildados a partir da **raiz** do monorepo:
+Alvo: **EasyPanel** ([D-019](docs/DECISIONS.md#d-019)). O roteiro passo a passo está em
+[docs/DEPLOY.md](docs/DEPLOY.md). Há um Dockerfile por app, todos buildados a partir da
+**raiz** do monorepo:
 
 ```bash
 docker build -f apps/api/Dockerfile               -t waymage-api .
@@ -95,6 +96,9 @@ Pontos que mordem se passarem despercebidos:
   requests vindos do mesmo IP.
 - **`NODE_ENV=production`** é o que remove as rotas `/dev/*`.
 - **`JWT_ACCESS_SECRET` precisa de 32+ caracteres** e a API se recusa a subir sem isso.
+- **`COOKIE_SAMESITE=none`** quando web e API não compartilham o site registrável — o que
+  inclui os domínios padrão do EasyPanel, porque `easypanel.host` está na Public Suffix List.
+  Errar aqui faz o login responder 200 e todo request seguinte voltar 401.
 - Storage de produção: Cloudflare R2 ([D-021](docs/DECISIONS.md#d-021)) — só variáveis de
   ambiente, o código é o mesmo. MinIO fica para desenvolvimento local.
 - Configure **backup do Postgres para fora do host** antes do primeiro usuário real.
