@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { referenceRoleSchema, type SceneReference, type SceneSpec } from '@waymage/scene-spec';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, queryKeys, uploadAsset, type Asset } from '../lib/api';
 import { Icon } from './ui/icons';
 import { toast } from './ui/toast';
@@ -39,6 +39,7 @@ export function LibraryPanel({
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const assets = useQuery({
     queryKey: queryKeys.assets(projectId),
@@ -70,6 +71,48 @@ export function LibraryPanel({
     },
   });
 
+  /**
+   * Colar imagem da área de transferência.
+   *
+   * `Ctrl+V` com um print copiado é o caminho mais curto que existe para trazer uma
+   * referência — e quem trabalha com imagem tenta isso por reflexo. Ignorado quando o foco
+   * está num campo de texto, onde colar pertence ao campo.
+   */
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+
+      const file = [...(event.clipboardData?.items ?? [])]
+        .find((item) => item.type.startsWith('image/'))
+        ?.getAsFile();
+
+      if (file) {
+        setError(null);
+        upload.mutate(file);
+      }
+    }
+
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [upload]);
+
+  /** Aceita o primeiro arquivo solto. Vários de uma vez entram na Fase de lote. */
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(false);
+
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Solte uma imagem JPEG, PNG ou WebP.');
+      return;
+    }
+    setError(null);
+    upload.mutate(file);
+  }
+
   const referenceOf = (assetId: string): SceneReference | undefined =>
     spec.references.find((reference) => reference.assetId === assetId);
 
@@ -95,7 +138,22 @@ export function LibraryPanel({
   }
 
   return (
-    <section>
+    <section
+      // A coluna inteira é alvo de soltura, não só a área vazia: depois do primeiro upload a
+      // área vazia some, e o alvo não deveria sumir junto.
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        // `relatedTarget` fora da seção: sair para um filho não conta como sair.
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={handleDrop}
+      className={`rounded-lg transition-all duration-fast ease-out ${
+        dragging ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface-raised' : ''
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between px-1">
         <h2 className="text-label uppercase text-ink-muted">Referências</h2>
         <button

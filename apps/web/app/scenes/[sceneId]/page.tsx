@@ -21,7 +21,7 @@ import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
 import { useGeneration } from '../../../lib/use-generation';
 import { ScenePreview } from '../../../components/scene-preview';
-import { useEditorStore } from '../../../stores/editor-store';
+import { MODE_LABELS, useEditorStore, type EditorMode } from '../../../stores/editor-store';
 
 /**
  * Editor de cena.
@@ -292,14 +292,16 @@ function TopBar({
   );
 }
 
+/**
+ * Modo de complexidade progressiva.
+ *
+ * O `title` de cada opção diz o que ela revela — sem isso, "Rápido" e "Pro" são rótulos que
+ * a pessoa precisa testar para descobrir o efeito.
+ */
 function ModeSelector() {
   const { mode, setMode } = useEditorStore();
-  const modes = [
-    { value: 'quick', label: 'Rápido' },
-    { value: 'guided', label: 'Guiado' },
-    { value: 'pro', label: 'Pro' },
-  ] as const;
-  const index = modes.findIndex((m) => m.value === mode);
+  const modes = Object.keys(MODE_LABELS) as EditorMode[];
+  const index = modes.indexOf(mode);
 
   return (
     <div
@@ -314,15 +316,16 @@ function ModeSelector() {
       />
       {modes.map((item) => (
         <button
-          key={item.value}
+          key={item}
           type="button"
-          onClick={() => setMode(item.value)}
-          aria-pressed={mode === item.value}
+          onClick={() => setMode(item)}
+          aria-pressed={mode === item}
+          title={MODE_LABELS[item].description}
           className={`relative z-10 px-2.5 py-1 text-micro font-semibold transition-colors duration-fast ${
-            mode === item.value ? 'text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'
+            mode === item ? 'text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'
           }`}
         >
-          {item.label}
+          {MODE_LABELS[item].label}
         </button>
       ))}
     </div>

@@ -839,6 +839,40 @@ dia.
 
 ---
 
+## D-048 — Complexidade progressiva esconde secoes, nao valores
+
+**Status:** aceita (Fase 7)
+
+Rapido / Guiado / Pro mudam o que esta a vista, nunca o `SceneSpec`. Um campo escondido
+mantem o valor que tinha, e trocar de modo revela em vez de reconfigurar — trocar para Rapido
+e voltar nao pode custar a iluminacao que a pessoa ja tinha ajustado.
+
+Rapido mostra intencao, sujeito e saida: o minimo para gerar. Pro acrescenta seed, negative
+prompt e escolha de provedor, que sao os controles onde errar e barato para quem sabe o que
+faz e caro para quem nao sabe.
+
+A lista mora em `VISIBLE`, no `editor-store` — uma tabela, nao `if`s espalhados pelo
+inspetor.
+
+---
+
+## D-049 — Arrastar e colar sao a mesma entrada de referencia
+
+**Status:** aceita (Fase 7)
+
+O texto dizia "arraste ou clique" e so o clique funcionava. Arrastar passou a valer na coluna
+inteira da biblioteca, e nao so na area vazia: depois do primeiro upload a area vazia some, e
+o alvo nao deveria sumir junto.
+
+`Ctrl+V` com imagem na area de transferencia entrou pelo mesmo caminho — e o gesto mais curto
+que existe para trazer um print, e quem trabalha com imagem tenta por reflexo. Ignorado
+quando o foco esta em campo de texto, onde colar pertence ao campo.
+
+Um arquivo por vez: lote pertence a uma fase que tenha fila e progresso por item.
+
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
