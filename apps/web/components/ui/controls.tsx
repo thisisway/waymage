@@ -318,13 +318,25 @@ export function Slider({
   onChange,
   hint,
   marks,
+  // Padrão 0..1 exibido em porcentagem, que é a forma da maioria dos campos do SceneSpec.
+  // Faixas em pixel (espessura de pincel, suavização) passam a sua própria escala.
+  min = 0,
+  max = 1,
+  step = 0.05,
+  format,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   hint?: string;
   marks?: readonly [string, string];
+  min?: number;
+  max?: number;
+  step?: number;
+  format?: (value: number) => string;
 }) {
+  const filled = max === min ? 0 : (value - min) / (max - min);
+
   return (
     <Field label={label} hint={hint}>
       <div className="flex items-center gap-3">
@@ -336,22 +348,22 @@ export function Slider({
           >
             <span
               className="block h-full rounded-pill bg-accent transition-all duration-instant ease-out"
-              style={{ width: `${value * 100}%` }}
+              style={{ width: `${filled * 100}%` }}
             />
           </span>
           <input
             type="range"
-            min={0}
-            max={1}
-            step={0.05}
+            min={min}
+            max={max}
+            step={step}
             value={value}
             aria-label={label}
             onChange={(e) => onChange(Number(e.target.value))}
             className="relative h-6 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-pill [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-accent [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:transition-transform hover:[&::-webkit-slider-thumb]:scale-110"
           />
         </span>
-        <span className="w-9 text-right font-mono text-code text-ink-secondary">
-          {Math.round(value * 100)}
+        <span className="w-11 text-right font-mono text-code text-ink-secondary">
+          {format ? format(value) : Math.round(value * 100)}
         </span>
       </div>
       {marks && (

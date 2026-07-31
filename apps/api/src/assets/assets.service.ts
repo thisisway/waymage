@@ -81,7 +81,7 @@ export class AssetsService {
         id: assetId,
         workspaceId: principal.workspaceId,
         projectId: input.projectId,
-        kind: AssetKind.REFERENCE,
+        kind: AssetKind[input.kind],
         status: AssetStatus.PENDING_UPLOAD,
         storageKey,
         mimeType: input.contentType,

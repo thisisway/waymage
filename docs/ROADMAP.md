@@ -1,6 +1,7 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 7 concluídas.** Próxima: Fase 8 (edição localizada por máscara).
+Estado atual: **Fases 1 a 8 concluídas** (Fase 8 parcial, ver ressalvas). Próxima: Fase 9
+(segundo provedor e roteamento).
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -159,12 +160,22 @@ imagem) e restaurar uma versão antiga da cena para o rascunho.
 
 ---
 
-## 🔜 Fase 8 — Edição localizada
+## ✅ Fase 8 — Edição localizada
 
-- [ ] Canvas Konva com zoom e pan
-- [ ] `MaskAsset`: pintar, apagar, inverter, feather, expandir/contrair
-- [ ] `EditOperation` gerando nova versão
-- [ ] Before/after e indicação de áreas bloqueadas
+- [x] Canvas de pintura com zoom e pan (sem Konva — ver D-050)
+- [x] `MaskAsset`: pintar, apagar, limpar, inverter, feather
+- [x] `EditOperation` ligada ao job, à máscara e ao asset produzido
+- [x] `POST /generation-results/:id/edit` → job `MASKED_EDIT`, uma imagem, seed preservada
+- [x] `ImageProvider.edit()` no pipeline, com imagem base e máscara fora de `references`
+- [ ] **Pendente:** expandir/contrair a máscara (morfologia)
+- [ ] **Pendente:** before/after entre o resultado de origem e o editado
+- [ ] **Pendente:** indicação visual das áreas travadas por `locks` do SceneSpec
+
+**Aceite (verificado):** `pnpm check` verde (204 testes); fluxo real contra Postgres, Redis e
+MinIO — gerar 4 rascunhos → pintar máscara → `MASKED_EDIT` → PNG de 6.477 bytes no bucket,
+seed preservada (772914146 → 772914146) e carteira em 95 créditos (4 do rascunho + 1 da
+edição). `EditOperation` fecha a linhagem com `resultAssetId`, e `ProviderRun` não guarda
+nenhuma URL assinada.
 
 ---
 

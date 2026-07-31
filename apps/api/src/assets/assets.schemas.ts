@@ -3,6 +3,13 @@ import { z } from 'zod';
 
 export const requestUploadSchema = z.object({
   projectId: z.string().uuid(),
+  /**
+   * Referência (padrão) ou máscara de edição localizada.
+   *
+   * Separa os dois na origem: máscara é insumo de uma edição, não material criativo, e
+   * misturá-las faria a biblioteca do editor encher de PNGs pretos e brancos.
+   */
+  kind: z.enum(['REFERENCE', 'MASK']).default('REFERENCE'),
   /** Só para exibição. A chave no bucket é gerada por nós, nunca derivada deste valor. */
   filename: z.string().trim().min(1).max(255),
   /**

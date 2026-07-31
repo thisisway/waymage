@@ -232,6 +232,117 @@ describe('refinamento', () => {
   }, 60_000);
 });
 
+/** Máscara pronta para uso, como estaria depois do upload e do processamento. */
+async function seedMask(session: Session): Promise<string> {
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: session.projectId },
+    select: { workspaceId: true },
+  });
+
+  const mask = await prisma.asset.create({
+    data: {
+      workspaceId: project.workspaceId,
+      projectId: session.projectId,
+      kind: 'MASK',
+      status: 'READY',
+      storageKey: `workspaces/${project.workspaceId}/masks/${randomUUID()}.png`,
+      mimeType: 'image/png',
+      width: 512,
+      height: 512,
+    },
+    select: { id: true },
+  });
+
+  return mask.id;
+}
+
+describe('edição localizada', () => {
+  it('registra máscara, instrução e linhagem', async () => {
+    const session = await setup('edicao');
+    const { resultId } = await seedResult(session);
+    const maskAssetId = await seedMask(session);
+
+    const response = await call(session, 'POST', `/generation-results/${resultId}/edit`, {
+      maskAssetId,
+      instruction: 'trocar o fundo por uma parede de concreto',
+      featherPx: 8,
+      inverted: false,
+    });
+
+    expect(response.statusCode, response.body).toBe(202);
+    const job = JSON.parse(response.body) as {
+      id: string;
+      operationType: string;
+      requestedCount: number;
+      sourceResultId: string | null;
+    };
+
+    expect(job.operationType).toBe('MASKED_EDIT');
+    // Edição repinta uma região de UMA imagem: quatro saídas não fariam sentido.
+    expect(job.requestedCount).toBe(1);
+    expect(job.sourceResultId).toBe(resultId);
+
+    const operation = await prisma.editOperation.findUniqueOrThrow({
+      where: { generationJobId: job.id },
+      select: {
+        instruction: true,
+        mask: { select: { assetId: true, featherPx: true, inverted: true } },
+      },
+    });
+
+    expect(operation.instruction).toBe('trocar o fundo por uma parede de concreto');
+    expect(operation.mask?.assetId).toBe(maskAssetId);
+    // Feather e inversão ficam como dado, não gravados nos pixels: dá para repetir a edição
+    // com outro valor sem repintar a máscara.
+    expect(operation.mask?.featherPx).toBe(8);
+    expect(operation.mask?.inverted).toBe(false);
+  }, 60_000);
+
+  it('recusa máscara de outro workspace', async () => {
+    const dono = await setup('edicao-dono');
+    const intruso = await setup('edicao-intruso');
+    const { resultId } = await seedResult(dono);
+    const maskAssetId = await seedMask(intruso);
+
+    // O resultado é do dono e a máscara é do intruso: aceitar isso vazaria o arquivo de um
+    // workspace para dentro da geração de outro.
+    const response = await call(dono, 'POST', `/generation-results/${resultId}/edit`, {
+      maskAssetId,
+      instruction: 'apagar o objeto do canto',
+    });
+
+    expect(response.statusCode).toBe(404);
+  }, 60_000);
+
+  it('recusa um asset comum no lugar da máscara', async () => {
+    const session = await setup('edicao-tipo');
+    const { resultId } = await seedResult(session);
+
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: session.projectId },
+      select: { workspaceId: true },
+    });
+    const reference = await prisma.asset.create({
+      data: {
+        workspaceId: project.workspaceId,
+        projectId: session.projectId,
+        kind: 'REFERENCE',
+        status: 'READY',
+        storageKey: `workspaces/${project.workspaceId}/refs/${randomUUID()}.png`,
+        mimeType: 'image/png',
+      },
+      select: { id: true },
+    });
+
+    const response = await call(session, 'POST', `/generation-results/${resultId}/edit`, {
+      maskAssetId: reference.id,
+      instruction: 'clarear o rosto',
+    });
+
+    expect(response.statusCode).toBe(404);
+  }, 60_000);
+});
+
 describe('exportação', () => {
   it('cria o pedido e devolve status inicial', async () => {
     const session = await setup('exportar');

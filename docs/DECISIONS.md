@@ -870,6 +870,57 @@ quando o foco esta em campo de texto, onde colar pertence ao campo.
 
 Um arquivo por vez: lote pertence a uma fase que tenha fila e progresso por item.
 
+---
+
+## D-050 — Canvas nativo em vez de Konva
+
+**Status:** aceita (Fase 8)
+
+O plano previa Konva para a edicao localizada. Konva e uma biblioteca de grafo de cena —
+objetos, alcas de transformacao, hit-testing — e a mascara nao e nada disso: e uma camada
+raster onde se pinta com o dedo ou o mouse. Mesmo com Konva, a pintura acabaria num
+`<canvas>` 2D dentro de um `Konva.Image`, e teriamos pago ~150 KB e uma abstracao inteira
+para chegar no mesmo lugar.
+
+Zoom e pan vieram da plataforma: um contêiner `overflow-auto` com o conteudo escalado da ao
+navegador o pan de graca, com inercia de trackpad e barras de rolagem que ja funcionam. Nao
+ha matematica de arrasto para manter.
+
+O que se perde e o que a Fase 8 nao pede: manipular objetos vetoriais sobre a imagem. Quando
+isso entrar — anotacoes, formas, texto reposicionavel — Konva volta a ser a escolha certa, e
+o canvas de pintura continua valendo por baixo.
+
+---
+
+## D-051 — Suavizacao e inversao sao dado, nao pixel
+
+**Status:** aceita (Fase 8)
+
+A mascara pintada e binaria: branco onde editar, preto onde preservar. `featherPx` e
+`inverted` ficam na linha `MaskAsset`, e nao gravados na imagem.
+
+Assim a mesma pintura pode ser reaproveitada com outra suavizacao sem repintar nada, e o
+registro do que foi pedido continua legivel — uma mascara ja borrada nao diz se a borda era
+intencional ou fruto de um valor que alguem escolheu meses atras.
+
+Cada edicao cria a sua propria `MaskAsset`, mesmo quando o PNG se repete: compartilhar a
+linha faria mudar um valor reescrever o historico das edicoes anteriores.
+
+---
+
+## D-052 — Imagem base e mascara fora de `references`
+
+**Status:** aceita (Fase 8)
+
+`ProviderEditRequest` carrega `baseImageUrl` e `maskUrl` em campos proprios. Elas sao insumos
+posicionais — o provedor precisa saber exatamente QUAL arquivo repintar e ONDE — enquanto
+`references` sao influencias com peso, que o provedor pondera.
+
+Misturar as duas coisas deixaria o provedor decidir quanto peso dar a imagem que ele deveria
+estar editando.
+
+Nenhuma das duas URLs vai para o `ProviderRun`: sao links de leitura direta ao bucket, e o
+registro de auditoria guarda o formato do pedido, nao a chave de acesso aos arquivos.
 
 ---
 

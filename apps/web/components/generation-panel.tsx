@@ -120,6 +120,7 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
 /** Grade de resultados. Enquanto não houver geração, mostra os espaços que serão preenchidos. */
 export function ResultsGrid({
   job,
+  projectId,
   placeholders,
   onSelect,
   onDerive,
@@ -127,6 +128,7 @@ export function ResultsGrid({
   onToggleCompare,
 }: {
   job: GenerationJob | null;
+  projectId: string;
   placeholders: number;
   onSelect: (resultId: string) => void;
   onDerive: (jobId: string) => void;
@@ -156,6 +158,7 @@ export function ResultsGrid({
         <ResultCard
           key={result.id}
           result={result}
+          projectId={projectId}
           index={index}
           onSelect={() => onSelect(result.id)}
           onDerive={onDerive}
@@ -169,6 +172,7 @@ export function ResultsGrid({
 
 function ResultCard({
   result,
+  projectId,
   index,
   onSelect,
   onDerive,
@@ -176,6 +180,7 @@ function ResultCard({
   onToggleCompare,
 }: {
   result: GenerationResult;
+  projectId: string;
   index: number;
   onSelect: () => void;
   onDerive: (jobId: string) => void;
@@ -241,7 +246,7 @@ function ResultCard({
         comparar
       </label>
 
-      <ResultActions resultId={result.id} onDerive={onDerive} />
+      <ResultActions result={result} projectId={projectId} onDerive={onDerive} />
     </figure>
   );
 }

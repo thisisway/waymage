@@ -128,3 +128,44 @@ describe('runProviderJob', () => {
     expect(error.refundable).toBe(false);
   });
 });
+
+describe('edição localizada', () => {
+  it('submete por edit quando há imagem base, e não por generate', async () => {
+    const provider = new FakeImageProvider({ latencyMs: 0 });
+    const edit = vi.spyOn(provider, 'edit');
+    const generate = vi.spyOn(provider, 'generate');
+    const clock = virtualClock();
+
+    const status = await runProviderJob(
+      provider,
+      {
+        ...request({ count: 1, mode: 'edit' }),
+        baseImageUrl: 'https://storage.test/base.png',
+        maskUrl: 'https://storage.test/mask.png',
+      },
+      { timeoutMs: 5_000, pollIntervalMs: 100, sleep: clock.sleep, now: clock.now },
+    );
+
+    expect(edit).toHaveBeenCalledOnce();
+    expect(generate).not.toHaveBeenCalled();
+    expect(status.state).toBe('succeeded');
+    expect(status.images).toHaveLength(1);
+  });
+
+  it('recusa a edição sem imagem base', async () => {
+    const provider = new FakeImageProvider({ latencyMs: 0 });
+    const clock = virtualClock();
+
+    // `baseImageUrl` vazio chega aqui se o resultado de origem tiver perdido o asset: o
+    // provedor precisa recusar em vez de gerar uma imagem nova do zero e cobrar por ela.
+    const error = await rejection(
+      runProviderJob(
+        provider,
+        { ...request({ count: 1, mode: 'edit' }), baseImageUrl: '' },
+        { timeoutMs: 5_000, pollIntervalMs: 100, sleep: clock.sleep, now: clock.now },
+      ),
+    );
+
+    expect(error.code).toBe('MISSING_BASE_IMAGE');
+  });
+});

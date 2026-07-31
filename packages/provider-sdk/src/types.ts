@@ -58,6 +58,10 @@ export interface ProviderEditRequest extends ProviderGenerationRequest {
   baseImageUrl: string;
   /** URL assinada do PNG de máscara. Branco = editar, preto = preservar. */
   maskUrl?: string;
+  /** Suavização da borda da máscara, em pixels — evita emenda visível na costura. */
+  maskFeatherPx?: number;
+  /** Inverte a máscara: edita tudo MENOS o que foi pintado. */
+  maskInverted?: boolean;
 }
 
 export interface ProviderCostEstimate {

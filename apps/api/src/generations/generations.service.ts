@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { GenerationStatus, OperationType, type Prisma } from '@waymage/database';
+import {
+  AssetKind,
+  AssetStatus,
+  GenerationStatus,
+  OperationType,
+  type Prisma,
+} from '@waymage/database';
 import { isTerminal, STATE_LABELS, STATE_PROGRESS, type GenerationState } from '@waymage/domain';
 import { FakeImageProvider } from '@waymage/provider-sdk';
 import { promptCompiler } from '@waymage/prompt-compiler';
@@ -12,7 +18,7 @@ import { AppStorageService } from '../infra/storage.service';
 import type { RequestPrincipal } from '../auth/request-user';
 import { GenerationQueueService } from '../queue/generation-queue.service';
 import { ScenesService } from '../scenes/scenes.service';
-import type { CreateGenerationInput, EstimateInput } from './generations.schemas';
+import type { CreateGenerationInput, EditInput, EstimateInput } from './generations.schemas';
 
 export interface GenerationResultView {
   id: string;
@@ -276,12 +282,43 @@ export class GenerationsService {
     return this.derive(principal, resultId, idempotencyKey, 'REFINE', requestId);
   }
 
+  /**
+   * Edição localizada: repinta só a região marcada na máscara.
+   *
+   * Nasce de um resultado, não de uma cena — o que se edita é uma imagem que já existe. A
+   * cena continua sendo a mesma `SceneVersion` do job de origem, e serve de contexto para o
+   * provedor preservar estilo e iluminação fora da máscara.
+   */
+  async edit(
+    principal: RequestPrincipal,
+    resultId: string,
+    input: EditInput,
+    idempotencyKey: string,
+    requestId?: string,
+  ): Promise<GenerationJobView> {
+    const mask = await this.prisma.asset.findFirst({
+      where: {
+        id: input.maskAssetId,
+        workspaceId: principal.workspaceId,
+        kind: AssetKind.MASK,
+        deletedAt: null,
+        // PENDING_UPLOAD é upload que nunca chegou: não há arquivo para o worker buscar.
+        status: { in: [AssetStatus.PROCESSING, AssetStatus.READY] },
+      },
+      select: { id: true },
+    });
+    if (!mask) throw AppError.notFound('Máscara');
+
+    return this.derive(principal, resultId, idempotencyKey, 'MASKED_EDIT', requestId, input);
+  }
+
   private async derive(
     principal: RequestPrincipal,
     resultId: string,
     idempotencyKey: string,
-    operation: 'VARIATION' | 'REFINE',
+    operation: 'VARIATION' | 'REFINE' | 'MASKED_EDIT',
     requestId?: string,
+    edit?: EditInput,
   ): Promise<GenerationJobView> {
     const existing = await this.prisma.generationJob.findUnique({
       where: {
@@ -311,10 +348,17 @@ export class GenerationsService {
 
     const spec = parseSceneSpec(source.job.sceneVersion.sceneSpec);
 
-    // Variação mantém o pedido original; refinamento sobe a qualidade e reduz a contagem.
-    const count = operation === 'REFINE' ? 1 : spec.output.count;
+    // Variação mantém o pedido original; refinamento e edição entregam uma imagem só —
+    // ambos partem de uma saída que o usuário já escolheu, e explorar de novo seria desperdício.
+    const count = operation === 'VARIATION' ? spec.output.count : 1;
     const mode =
-      operation === 'REFINE' ? 'final' : spec.output.quality === 'final' ? 'final' : 'draft';
+      operation === 'MASKED_EDIT'
+        ? ('edit' as const)
+        : operation === 'REFINE'
+          ? ('final' as const)
+          : spec.output.quality === 'final'
+            ? ('final' as const)
+            : ('draft' as const);
 
     const cost = await this.defaultProvider.estimateCost({
       requestId: requestId ?? 'derive',
@@ -345,6 +389,31 @@ export class GenerationsService {
       },
       select: { id: true },
     });
+
+    if (edit) {
+      // Uma `MaskAsset` por edição, mesmo que o PNG se repita: feather e inversão são
+      // parâmetros DESTA edição, e compartilhar a linha faria mudar um valor reescrever o
+      // histórico de edições anteriores.
+      const maskAsset = await this.prisma.maskAsset.create({
+        data: {
+          workspaceId: principal.workspaceId,
+          assetId: edit.maskAssetId,
+          featherPx: edit.featherPx,
+          inverted: edit.inverted,
+        },
+        select: { id: true },
+      });
+
+      await this.prisma.editOperation.create({
+        data: {
+          workspaceId: principal.workspaceId,
+          sourceResultId: source.id,
+          generationJobId: job.id,
+          maskId: maskAsset.id,
+          instruction: edit.instruction,
+        },
+      });
+    }
 
     try {
       await this.billing.reserve({
@@ -379,10 +448,15 @@ export class GenerationsService {
     await this.audit.record({
       workspaceId: principal.workspaceId,
       actorUserId: principal.user.id,
-      action: operation === 'REFINE' ? 'generation.refine' : 'generation.variation',
+      action:
+        operation === 'MASKED_EDIT'
+          ? 'generation.edit'
+          : operation === 'REFINE'
+            ? 'generation.refine'
+            : 'generation.variation',
       resourceType: 'GenerationJob',
       resourceId: job.id,
-      metadata: { sourceResultId: source.id },
+      metadata: { sourceResultId: source.id, ...(edit ? { maskAssetId: edit.maskAssetId } : {}) },
       ...(requestId ? { requestId } : {}),
     });
 

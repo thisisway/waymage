@@ -21,8 +21,10 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { GenerationEventsService } from './generation-events.service';
 import {
   createGenerationSchema,
+  editSchema,
   estimateSchema,
   type CreateGenerationInput,
+  type EditInput,
   type EstimateInput,
 } from './generations.schemas';
 import {
@@ -142,6 +144,26 @@ export class GenerationsController {
     return this.generations.refine(
       principal,
       resultId,
+      idempotencyKey?.trim() || randomUUID(),
+      requestId(request),
+    );
+  }
+
+  /** Edição localizada: repinta só o que a máscara marca. */
+  @Post('generation-results/:resultId/edit')
+  @RequireRole(WorkspaceRole.MEMBER)
+  @HttpCode(HttpStatus.ACCEPTED)
+  edit(
+    @Principal() principal: RequestPrincipal,
+    @Param('resultId', ParseUUIDPipe) resultId: string,
+    @Body(new ZodValidationPipe(editSchema)) body: EditInput,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<GenerationJobView> {
+    return this.generations.edit(
+      principal,
+      resultId,
+      body,
       idempotencyKey?.trim() || randomUUID(),
       requestId(request),
     );

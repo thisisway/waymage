@@ -357,6 +357,7 @@ function Canvas({
       ) : results.length > 0 ? (
         <ResultsGrid
           job={generation.job}
+          projectId={scene.projectId}
           placeholders={scene.sceneSpec.output.count}
           onSelect={onSelectResult}
           onDerive={generation.follow}

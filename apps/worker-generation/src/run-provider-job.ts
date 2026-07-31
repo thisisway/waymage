@@ -1,6 +1,7 @@
 import {
   ProviderError,
   type ImageProvider,
+  type ProviderEditRequest,
   type ProviderGenerationRequest,
   type ProviderJobStatus,
 } from '@waymage/provider-sdk';
@@ -26,14 +27,17 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 
 export async function runProviderJob(
   provider: ImageProvider,
-  request: ProviderGenerationRequest,
+  request: ProviderGenerationRequest | ProviderEditRequest,
   options: RunOptions,
 ): Promise<ProviderJobStatus> {
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? (() => Date.now());
   const deadline = now() + options.timeoutMs;
 
-  const handle = await provider.generate(request);
+  // A presença da imagem base é o que distingue uma edição: o resto do acompanhamento —
+  // polling, timeout, cancelamento — é idêntico nos dois casos.
+  const handle =
+    'baseImageUrl' in request ? await provider.edit(request) : await provider.generate(request);
 
   for (;;) {
     const status = await provider.getStatus(handle.providerJobId);

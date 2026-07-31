@@ -361,6 +361,18 @@ export const api = {
       headers: { 'idempotency-key': idempotencyKey },
     }),
 
+  /** Edição localizada: repinta só a região marcada pela máscara. */
+  edit: (
+    resultId: string,
+    input: { maskAssetId: string; instruction: string; featherPx: number; inverted: boolean },
+    idempotencyKey: string,
+  ) =>
+    apiFetch<GenerationJob>(`/generation-results/${resultId}/edit`, {
+      method: 'POST',
+      body: input,
+      headers: { 'idempotency-key': idempotencyKey },
+    }),
+
   createExport: (resultIds: string[], format: 'png' | 'jpeg' | 'webp') =>
     apiFetch<ExportJob>('/exports', { method: 'POST', body: { resultIds, format } }),
 
@@ -380,11 +392,17 @@ export const api = {
  * upload de 15 MB ocupe memória do processo que atende todo mundo. A API só assina a URL e,
  * depois, confere o que realmente chegou.
  */
-export async function uploadAsset(projectId: string, file: File): Promise<Asset> {
+export async function uploadAsset(
+  projectId: string,
+  file: File,
+  /** Máscara não é material criativo: fica fora da biblioteca de referências. */
+  kind: 'REFERENCE' | 'MASK' = 'REFERENCE',
+): Promise<Asset> {
   const ticket = await apiFetch<UploadTicket>('/assets/upload-url', {
     method: 'POST',
     body: {
       projectId,
+      kind,
       filename: file.name,
       contentType: file.type,
       sizeBytes: file.size,

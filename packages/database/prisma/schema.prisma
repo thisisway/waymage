@@ -417,6 +417,7 @@ model GenerationJob {
   usage        UsageLedger[]
   transactions CreditTransaction[]
   moderation   ModerationDecision[]
+  editOperation EditOperation?
 
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, status, createdAt])
@@ -508,12 +509,16 @@ model EditOperation {
   sourceResultId String   @db.Uuid
   maskId         String?  @db.Uuid
   resultAssetId  String?  @db.Uuid
+  /// Job que executa esta edicao. Unico: um job corresponde a uma operacao de edicao.
+  /// E por aqui que o worker recupera instrucao e mascara a partir do job da fila.
+  generationJobId String? @unique @db.Uuid
   instruction    String
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
 
-  sourceResult GenerationResult @relation(fields: [sourceResultId], references: [id], onDelete: Cascade)
-  mask         MaskAsset?       @relation(fields: [maskId], references: [id], onDelete: SetNull)
-  resultAsset  Asset?           @relation(fields: [resultAssetId], references: [id], onDelete: SetNull)
+  sourceResult  GenerationResult @relation(fields: [sourceResultId], references: [id], onDelete: Cascade)
+  mask          MaskAsset?       @relation(fields: [maskId], references: [id], onDelete: SetNull)
+  resultAsset   Asset?           @relation(fields: [resultAssetId], references: [id], onDelete: SetNull)
+  generationJob GenerationJob?   @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, sourceResultId])
   @@map("edit_operations")

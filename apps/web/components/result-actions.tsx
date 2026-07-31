@@ -2,7 +2,8 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ApiError, api, type ExportJob } from '../lib/api';
+import { ApiError, api, type ExportJob, type GenerationResult } from '../lib/api';
+import { MaskEditor } from './mask-editor';
 import { Icon } from './ui/icons';
 import { toast } from './ui/toast';
 
@@ -14,14 +15,18 @@ import { toast } from './ui/toast';
  * não.
  */
 export function ResultActions({
-  resultId,
+  result,
+  projectId,
   onDerive,
 }: {
-  resultId: string;
-  /** Chamado quando uma variação ou refinamento é criado, para o editor acompanhá-lo. */
+  result: GenerationResult;
+  projectId: string;
+  /** Chamado quando uma derivação é criada, para o editor acompanhá-la. */
   onDerive: (jobId: string) => void;
 }) {
+  const resultId = result.id;
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const variation = useMutation({
     mutationFn: () => api.variation(resultId, crypto.randomUUID()),
@@ -64,6 +69,15 @@ export function ResultActions({
           {refine.isPending ? 'refinando…' : 'refinar'}
         </ActionButton>
 
+        <ActionButton
+          onClick={() => setEditing(true)}
+          disabled={busy || !result.url}
+          title="Pintar uma região e descrever a mudança. Consome créditos."
+        >
+          <Icon name="brush" className="h-3.5 w-3.5" />
+          editar
+        </ActionButton>
+
         <ExportButton resultIds={[resultId]} />
       </div>
 
@@ -71,6 +85,18 @@ export function ResultActions({
         <p role="alert" className="text-xs text-state-error">
           {error}
         </p>
+      )}
+
+      {editing && result.url && (
+        <MaskEditor
+          resultId={resultId}
+          projectId={projectId}
+          imageUrl={result.url}
+          width={result.width}
+          height={result.height}
+          onClose={() => setEditing(false)}
+          onSubmit={onDerive}
+        />
       )}
     </div>
   );

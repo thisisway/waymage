@@ -71,6 +71,15 @@ export async function processGenerationJob(
       reservedCredits: true,
       sceneVersion: { select: { id: true, sceneSpec: true } },
       sourceResult: { select: { seed: true, asset: { select: { storageKey: true } } } },
+      editOperation: {
+        select: {
+          id: true,
+          instruction: true,
+          mask: {
+            select: { featherPx: true, inverted: true, asset: { select: { storageKey: true } } },
+          },
+        },
+      },
     },
   });
 
@@ -114,22 +123,28 @@ export async function processGenerationJob(
      * trocar a seed aqui produziria uma imagem diferente, que não é o que foi pedido.
      */
     const mode =
-      record.operationType === 'REFINE'
-        ? 'final'
-        : spec.output.quality === 'final'
+      record.operationType === 'MASKED_EDIT'
+        ? 'edit'
+        : record.operationType === 'REFINE'
           ? 'final'
-          : 'draft';
+          : spec.output.quality === 'final'
+            ? 'final'
+            : 'draft';
 
+    // Edição preserva a seed pela mesma razão do refinamento: fora da máscara a imagem tem
+    // de continuar a mesma, e seed nova redesenharia o quadro inteiro.
     const seed =
       record.operationType === 'VARIATION'
         ? Math.floor(Math.random() * 2_147_483_647)
-        : record.operationType === 'REFINE'
+        : record.operationType === 'REFINE' || record.operationType === 'MASKED_EDIT'
           ? Number(record.sourceResult?.seed ?? spec.advanced.seed ?? 0) || undefined
           : (spec.advanced.seed ?? undefined);
+
     const compilation = await promptCompiler.compile({
       sceneSpec: spec,
       providerCapabilities: capabilities,
       mode,
+      ...(record.editOperation ? { editInstruction: record.editOperation.instruction } : {}),
     });
 
     // Nunca guardar só o prompt: SceneSpec normalizado, versão do compilador e avisos
@@ -169,6 +184,33 @@ export async function processGenerationJob(
       });
     }
 
+    /**
+     * Edição localizada: imagem base e máscara vão fora de `references`.
+     *
+     * São insumos posicionais, não influências — o provedor precisa saber exatamente QUAL
+     * arquivo repintar e ONDE. Tratá-los como referência os colocaria em pé de igualdade com
+     * as referências de estilo, e o provedor escolheria quanto peso dar.
+     */
+    const editInputs =
+      record.operationType === 'MASKED_EDIT' && record.sourceResult?.asset
+        ? {
+            baseImageUrl: await storage.signedReadUrl(
+              record.sourceResult.asset.storageKey,
+              SIGNED_URL_TTL.read,
+            ),
+            ...(record.editOperation?.mask?.asset
+              ? {
+                  maskUrl: await storage.signedReadUrl(
+                    record.editOperation.mask.asset.storageKey,
+                    SIGNED_URL_TTL.read,
+                  ),
+                  maskFeatherPx: record.editOperation.mask.featherPx,
+                  maskInverted: record.editOperation.mask.inverted,
+                }
+              : {}),
+          }
+        : {};
+
     const request = {
       requestId: payload.requestId,
       prompt: compilation.prompt,
@@ -181,6 +223,7 @@ export async function processGenerationJob(
       ...(seed === undefined ? {} : { seed }),
       transparentBackground: spec.output.transparentBackground,
       sceneSpec: spec,
+      ...editInputs,
     } as const;
 
     const providerRun = await prisma.providerRun.create({
@@ -189,8 +232,11 @@ export async function processGenerationJob(
         generationJobId: record.id,
         provider: provider.id,
         // Sem as URLs assinadas: elas dão acesso aos arquivos e não devem ficar no banco.
+        // Vale para referências, imagem base e máscara — todas são links de leitura direta.
         request: {
           ...request,
+          baseImageUrl: undefined,
+          maskUrl: undefined,
           references: references.map(({ url: _url, ...rest }) => rest),
         } as unknown as Prisma.InputJsonValue,
         status: ProviderRunStatus.RUNNING,
@@ -235,6 +281,14 @@ export async function processGenerationJob(
       prisma,
       storage,
     });
+
+    // Fecha a linhagem da edição: a operação passa a apontar para o que ela produziu.
+    if (record.editOperation && stored[0]) {
+      await prisma.editOperation.update({
+        where: { id: record.editOperation.id },
+        data: { resultAssetId: stored[0].assetId },
+      });
+    }
 
     await advance('DOWNLOADING', 'MODERATING_OUTPUT');
     // Moderação de saída real entra na Fase 10; o passo existe para o pipeline já ter o
@@ -413,8 +467,8 @@ async function storeImages(
     prisma: PrismaClient;
     storage: StorageService;
   },
-): Promise<{ id: string; width: number; height: number }[]> {
-  const results: { id: string; width: number; height: number }[] = [];
+): Promise<{ id: string; assetId: string; width: number; height: number }[]> {
+  const results: { id: string; assetId: string; width: number; height: number }[] = [];
 
   for (const [index, image] of images.entries()) {
     const extension = image.mimeType.split('/')[1] ?? 'png';
@@ -457,7 +511,7 @@ async function storeImages(
       select: { id: true },
     });
 
-    results.push({ id: result.id, width: image.width, height: image.height });
+    results.push({ id: result.id, assetId: asset.id, width: image.width, height: image.height });
   }
 
   return results;
