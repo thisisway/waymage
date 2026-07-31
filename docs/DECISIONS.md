@@ -924,6 +924,60 @@ registro de auditoria guarda o formato do pedido, nao a chave de acesso aos arqu
 
 ---
 
+## D-053 — Expandir e contrair por desfoque com limiar
+
+**Status:** aceita (Fase 8)
+
+Dilatacao e erosao morfologicas, escritas de outro jeito: o `filter: blur(r)` do canvas
+espalha o alfa por `r` pixels, e onde se corta decide para que lado a borda anda — limiar
+baixo engole o que ficou de fora (expande), limiar alto descarta o que ficou de dentro
+(contrai).
+
+A alternativa era varrer a vizinhanca de cada pixel em JavaScript, que numa mascara de
+2048x2048 sao milhoes de iteracoes por clique, na thread que desenha a interface. O desfoque
+do canvas roda onde essas coisas devem rodar.
+
+O desfoque tambem apaga a cor, entao os pixels sobreviventes sao repintados: a mascara so
+existe no alfa, e a cor serve apenas para a pessoa ver o que marcou.
+
+---
+
+## D-054 — Antes-e-depois com cortina, nao lado a lado
+
+**Status:** aceita (Fase 8)
+
+Lado a lado resolve escolher entre rascunhos diferentes. Nao resolve edicao localizada, onde
+as duas imagens sao quase iguais de proposito e a diferenca esta numa regiao — o olho nao
+acha isso varrendo duas figuras separadas.
+
+A cortina poe as duas versoes no MESMO pixel. Aparece quando o job nasceu de um resultado e
+produziu uma imagem so; com varias saidas para escolher, a grade continua sendo a forma certa.
+
+Por isso `GenerationJobView` passou a trazer `sourceResult` resolvido: o resultado de origem
+costuma estar noutro job, que a tela nao tem em maos, e buscar em separado atrasaria a
+comparacao justo no momento em que ela e util.
+
+---
+
+## D-055 — Travas sao semanticas, e o aviso e textual
+
+**Status:** aceita (Fase 8)
+
+O plano da Fase 8 previa "indicacao de areas bloqueadas" no canvas. `locks` do SceneSpec nao
+sao areas: sao dez booleanos sobre aspectos — identidade, rosto, roupa, camera, paleta. Nao ha
+regiao para desenhar.
+
+Entao o editor de mascara mostra as travas ativas como aviso, e nao como sobreposicao: pintar
+sobre um aspecto travado e um pedido contraditorio, e a pessoa deve saber disso antes de
+gastar credito. Uma sobreposicao inventada seria pior que nenhuma — sugeriria precisao
+espacial que o dado nao tem.
+
+As travas ganharam secao no inspetor na mesma passagem. Ate aqui elas existiam no schema e no
+compilador ("Must preserve: ...") mas nao tinham como ser ligadas pela interface — o recurso
+existia sem porta de entrada.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

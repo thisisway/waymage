@@ -50,6 +50,36 @@ import {
 } from './previews';
 
 /**
+ * Travas do blueprint §20, na ordem em que fazem sentido decidir: quem é a pessoa, depois
+ * como ela aparece, depois como a cena foi feita.
+ */
+const LOCK_ORDER = [
+  'identity',
+  'face',
+  'hairstyle',
+  'wardrobe',
+  'pose',
+  'product',
+  'camera',
+  'composition',
+  'background',
+  'palette',
+] as const satisfies readonly (keyof SceneSpec['locks'])[];
+
+const LOCK_LABELS: Record<(typeof LOCK_ORDER)[number], string> = {
+  identity: 'Identidade',
+  face: 'Rosto',
+  hairstyle: 'Cabelo',
+  wardrobe: 'Roupa',
+  pose: 'Pose',
+  product: 'Produto',
+  camera: 'Câmera',
+  composition: 'Composição',
+  background: 'Fundo',
+  palette: 'Paleta',
+};
+
+/**
  * Inspetor da cena.
  *
  * Uma coluna de cartões colapsáveis, cada um mostrando o valor atual no subtítulo — dá para
@@ -507,6 +537,40 @@ export function Inspector({
           onChange={(v) => patch('output', { transparentBackground: v })}
         />
       </SectionCard>
+
+      <When section="locks">
+        <SectionCard
+          icon={<Icon name="lock" />}
+          title="Travas"
+          summary={
+            LOCK_ORDER.filter((key) => spec.locks[key]).length === 0
+              ? 'nada travado'
+              : `${LOCK_ORDER.filter((key) => spec.locks[key]).length} travadas`
+          }
+        >
+          <p className="text-micro leading-relaxed text-ink-muted">
+            O que estiver travado vira instrução explícita de preservação no prompt, e continua
+            valendo em variações, refinamentos e edições localizadas.
+          </p>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {LOCK_ORDER.map((key) => (
+              <label
+                key={key}
+                className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-secondary transition-colors duration-fast hover:text-ink-primary"
+              >
+                <input
+                  type="checkbox"
+                  checked={spec.locks[key]}
+                  onChange={(e) => patch('locks', { [key]: e.target.checked })}
+                  className="h-4 w-4 shrink-0 cursor-pointer accent-accent"
+                />
+                {LOCK_LABELS[key]}
+              </label>
+            ))}
+          </div>
+        </SectionCard>
+      </When>
 
       <When section="advanced">
         <SectionCard

@@ -1,7 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import type { SceneSpec } from '@waymage/scene-spec';
 import { api, queryKeys, type GenerationJob, type GenerationResult } from '../lib/api';
+import { BeforeAfter } from './before-after';
 import type { useGeneration } from '../lib/use-generation';
 import { ResultActions } from './result-actions';
 
@@ -121,6 +123,7 @@ export function GenerationProgressBar({ state }: { state: ReturnType<typeof useG
 export function ResultsGrid({
   job,
   projectId,
+  locks,
   placeholders,
   onSelect,
   onDerive,
@@ -129,6 +132,7 @@ export function ResultsGrid({
 }: {
   job: GenerationJob | null;
   projectId: string;
+  locks: SceneSpec['locks'];
   placeholders: number;
   onSelect: (resultId: string) => void;
   onDerive: (jobId: string) => void;
@@ -152,6 +156,34 @@ export function ResultsGrid({
     );
   }
 
+  /**
+   * Derivação de uma imagem só ganha cortina em vez de grade.
+   *
+   * Edição e refinamento devolvem uma variante do MESMO quadro, e uma figura solta não deixa
+   * ver o que mudou. A grade continua valendo quando há várias saídas para escolher.
+   */
+  const source = job?.sourceResult;
+  if (source && results.length === 1 && results[0]) {
+    return (
+      <div className="flex w-full max-w-2xl flex-col items-center gap-3">
+        <BeforeAfter before={source} after={results[0]} />
+        <div className="w-full">
+          <ResultCard
+            result={results[0]}
+            projectId={projectId}
+            locks={locks}
+            index={0}
+            onSelect={() => onSelect(results[0]!.id)}
+            onDerive={onDerive}
+            comparing={comparing.includes(results[0].id)}
+            onToggleCompare={() => onToggleCompare(results[0]!.id)}
+            hideImage
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="stagger grid w-full max-w-2xl grid-cols-2 gap-4">
       {results.map((result, index) => (
@@ -159,6 +191,7 @@ export function ResultsGrid({
           key={result.id}
           result={result}
           projectId={projectId}
+          locks={locks}
           index={index}
           onSelect={() => onSelect(result.id)}
           onDerive={onDerive}
@@ -173,46 +206,53 @@ export function ResultsGrid({
 function ResultCard({
   result,
   projectId,
+  locks,
   index,
   onSelect,
   onDerive,
   comparing,
   onToggleCompare,
+  hideImage,
 }: {
   result: GenerationResult;
   projectId: string;
+  locks: SceneSpec['locks'];
   index: number;
   onSelect: () => void;
   onDerive: (jobId: string) => void;
   comparing: boolean;
   onToggleCompare: () => void;
+  /** A cortina do antes-e-depois já mostra a imagem; repeti-la logo abaixo só ocuparia espaço. */
+  hideImage?: boolean;
 }) {
   return (
     <figure className="space-y-1.5">
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-pressed={result.selected}
-        className={`block w-full overflow-hidden rounded-lg border transition-all duration-fast ease-out ${
-          result.selected
-            ? 'border-accent shadow-glow'
-            : 'border-surface-border hover:-translate-y-0.5 hover:border-accent-40/60 hover:shadow-lg'
-        }`}
-      >
-        {result.url ? (
-          // <img> e não next/image: a URL é assinada e efêmera, e o otimizador do Next
-          // reescreveria a URL, quebrando a assinatura.
-          <img
-            src={result.url}
-            alt={`Resultado ${index + 1}`}
-            className="aspect-video w-full object-cover"
-          />
-        ) : (
-          <div className="flex aspect-video items-center justify-center bg-surface-raised text-xs text-ink-muted">
-            indisponível
-          </div>
-        )}
-      </button>
+      {!hideImage && (
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={result.selected}
+          className={`block w-full overflow-hidden rounded-lg border transition-all duration-fast ease-out ${
+            result.selected
+              ? 'border-accent shadow-glow'
+              : 'border-surface-border hover:-translate-y-0.5 hover:border-accent-40/60 hover:shadow-lg'
+          }`}
+        >
+          {result.url ? (
+            // <img> e não next/image: a URL é assinada e efêmera, e o otimizador do Next
+            // reescreveria a URL, quebrando a assinatura.
+            <img
+              src={result.url}
+              alt={`Resultado ${index + 1}`}
+              className="aspect-video w-full object-cover"
+            />
+          ) : (
+            <div className="flex aspect-video items-center justify-center bg-surface-raised text-xs text-ink-muted">
+              indisponível
+            </div>
+          )}
+        </button>
+      )}
 
       <figcaption className="flex items-center justify-between text-xs text-ink-muted">
         <span>
@@ -236,17 +276,19 @@ function ResultCard({
         )}
       </figcaption>
 
-      <label className="flex items-center gap-1.5 text-xs text-ink-muted">
-        <input
-          type="checkbox"
-          checked={comparing}
-          onChange={onToggleCompare}
-          className="h-3 w-3 accent-accent"
-        />
-        comparar
-      </label>
+      {!hideImage && (
+        <label className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <input
+            type="checkbox"
+            checked={comparing}
+            onChange={onToggleCompare}
+            className="h-3 w-3 accent-accent"
+          />
+          comparar
+        </label>
+      )}
 
-      <ResultActions result={result} projectId={projectId} onDerive={onDerive} />
+      <ResultActions result={result} projectId={projectId} locks={locks} onDerive={onDerive} />
     </figure>
   );
 }

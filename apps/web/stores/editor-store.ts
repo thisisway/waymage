@@ -9,6 +9,7 @@ export const SECTIONS = [
   'lighting',
   'composition',
   'style',
+  'locks',
   'output',
   'advanced',
 ] as const;
@@ -29,7 +30,17 @@ export type EditorMode = 'quick' | 'guided' | 'pro';
 const VISIBLE: Record<EditorMode, readonly SectionId[]> = {
   /** O mínimo para gerar algo: o que se quer, de quem, e em que formato. */
   quick: ['intent', 'subject', 'output'],
-  guided: ['intent', 'subject', 'scene', 'camera', 'lighting', 'composition', 'style', 'output'],
+  guided: [
+    'intent',
+    'subject',
+    'scene',
+    'camera',
+    'lighting',
+    'composition',
+    'style',
+    'locks',
+    'output',
+  ],
   pro: SECTIONS,
 };
 

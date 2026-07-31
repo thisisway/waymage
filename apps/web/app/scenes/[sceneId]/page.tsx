@@ -358,6 +358,7 @@ function Canvas({
         <ResultsGrid
           job={generation.job}
           projectId={scene.projectId}
+          locks={scene.sceneSpec.locks}
           placeholders={scene.sceneSpec.output.count}
           onSelect={onSelectResult}
           onDerive={generation.follow}

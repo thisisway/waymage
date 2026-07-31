@@ -216,6 +216,8 @@ export interface GenerationJob {
   sceneVersionId: string;
   operationType: 'TEXT_TO_IMAGE' | 'IMAGE_TO_IMAGE' | 'VARIATION' | 'REFINE' | 'MASKED_EDIT';
   sourceResultId: string | null;
+  /** A imagem de origem, já resolvida — é o "antes" da comparação. */
+  sourceResult: GenerationResult | null;
   status: string;
   statusLabel: string;
   progress: number;

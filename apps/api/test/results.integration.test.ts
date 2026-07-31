@@ -275,9 +275,14 @@ describe('edição localizada', () => {
       operationType: string;
       requestedCount: number;
       sourceResultId: string | null;
+      sourceResult: { id: string; url: string | null } | null;
     };
 
     expect(job.operationType).toBe('MASKED_EDIT');
+    // A imagem de origem vem resolvida no próprio job: sem ela o "antes e depois" precisaria
+    // buscar um resultado que está noutro job, que a tela não tem em mãos.
+    expect(job.sourceResult?.id).toBe(resultId);
+    expect(job.sourceResult?.url).toBeTruthy();
     // Edição repinta uma região de UMA imagem: quatro saídas não fariam sentido.
     expect(job.requestedCount).toBe(1);
     expect(job.sourceResultId).toBe(resultId);

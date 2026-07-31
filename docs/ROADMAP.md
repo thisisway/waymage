@@ -1,7 +1,7 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 8 concluídas** (Fase 8 parcial, ver ressalvas). Próxima: Fase 9
-(segundo provedor e roteamento).
+Estado atual: **Fases 1 a 8 concluídas.** Próxima: Fase 9 (segundo provedor e roteamento) —
+primeira fase que exige chave de API real, e portanto autorização.
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
@@ -167,9 +167,9 @@ imagem) e restaurar uma versão antiga da cena para o rascunho.
 - [x] `EditOperation` ligada ao job, à máscara e ao asset produzido
 - [x] `POST /generation-results/:id/edit` → job `MASKED_EDIT`, uma imagem, seed preservada
 - [x] `ImageProvider.edit()` no pipeline, com imagem base e máscara fora de `references`
-- [ ] **Pendente:** expandir/contrair a máscara (morfologia)
-- [ ] **Pendente:** before/after entre o resultado de origem e o editado
-- [ ] **Pendente:** indicação visual das áreas travadas por `locks` do SceneSpec
+- [x] Expandir/contrair a máscara, por desfoque com limiar (D-053)
+- [x] Antes-e-depois com cortina entre o resultado de origem e o editado (D-054)
+- [x] Travas do SceneSpec no inspetor, e aviso das ativas no editor de máscara (D-055)
 
 **Aceite (verificado):** `pnpm check` verde (204 testes); fluxo real contra Postgres, Redis e
 MinIO — gerar 4 rascunhos → pintar máscara → `MASKED_EDIT` → PNG de 6.477 bytes no bucket,

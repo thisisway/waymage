@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
+import type { SceneSpec } from '@waymage/scene-spec';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, uploadAsset } from '../lib/api';
 import { Button, Field, Slider, Toggle } from './ui/controls';
@@ -22,12 +23,32 @@ import { toast } from './ui/toast';
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 
+/** Passo de expandir/contrair, em pixels da imagem. */
+const RESHAPE_STEP = 4;
+
+/** Cor da pintura na tela. Some na exportação, que decide pelo alfa. */
+const PAINT: readonly [number, number, number] = [29, 102, 255];
+
+const LOCK_LABELS: Partial<Record<keyof SceneSpec['locks'], string>> = {
+  identity: 'identidade',
+  face: 'rosto',
+  hairstyle: 'cabelo',
+  wardrobe: 'roupa',
+  pose: 'pose',
+  product: 'produto',
+  camera: 'câmera',
+  composition: 'composição',
+  background: 'fundo',
+  palette: 'paleta',
+};
+
 export function MaskEditor({
   resultId,
   projectId,
   imageUrl,
   width,
   height,
+  locks,
   onClose,
   onSubmit,
 }: {
@@ -36,6 +57,7 @@ export function MaskEditor({
   imageUrl: string;
   width: number;
   height: number;
+  locks: SceneSpec['locks'];
   onClose: () => void;
   onSubmit: (jobId: string) => void;
 }) {
@@ -75,8 +97,8 @@ export function MaskEditor({
     // `destination-out` apaga de verdade em vez de pintar preto por cima: a exportação
     // decide pelo alfa, e um "preto pintado" seria indistinguível de área marcada.
     context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-    context.strokeStyle = '#1D66FF';
-    context.fillStyle = '#1D66FF';
+    context.strokeStyle = `rgb(${PAINT.join(' ')})`;
+    context.fillStyle = `rgb(${PAINT.join(' ')})`;
     context.lineWidth = brush;
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -94,6 +116,44 @@ export function MaskEditor({
     }
 
     setPainted(true);
+  }
+
+  /**
+   * Expande ou contrai a máscara.
+   *
+   * Borrar e depois aplicar limiar é dilatação e erosão morfológicas escritas de outro jeito:
+   * o desfoque espalha o alfa por `raio` pixels, e onde se corta decide para que lado a borda
+   * anda — limiar baixo engole o que ficou de fora, limiar alto descarta o que ficou de
+   * dentro. Sai de graça no `filter` do canvas, sem varrer vizinhança em JavaScript.
+   */
+  function reshape(direction: 1 | -1): void {
+    const target = canvas.current;
+    const context = target?.getContext('2d');
+    if (!target || !context || !painted) return;
+
+    const buffer = document.createElement('canvas');
+    buffer.width = width;
+    buffer.height = height;
+    const blurred = buffer.getContext('2d');
+    if (!blurred) return;
+
+    blurred.filter = `blur(${RESHAPE_STEP}px)`;
+    blurred.drawImage(target, 0, 0);
+
+    const image = blurred.getImageData(0, 0, width, height);
+    const threshold = direction > 0 ? 24 : 232;
+    for (let i = 0; i < image.data.length; i += 4) {
+      // O desfoque também apagou a cor; repintá-la mantém a máscara visível na tela.
+      const on = (image.data[i + 3] ?? 0) >= threshold;
+      image.data[i] = PAINT[0];
+      image.data[i + 1] = PAINT[1];
+      image.data[i + 2] = PAINT[2];
+      image.data[i + 3] = on ? 255 : 0;
+    }
+
+    context.globalCompositeOperation = 'source-over';
+    context.clearRect(0, 0, width, height);
+    context.putImageData(image, 0, 0);
   }
 
   function clear(): void {
@@ -154,6 +214,10 @@ export function MaskEditor({
   });
 
   const ready = painted && instruction.trim().length >= 3;
+  const active = Object.entries(locks)
+    .filter(([, on]) => on)
+    .map(([key]) => LOCK_LABELS[key as keyof SceneSpec['locks']])
+    .filter((label): label is string => label !== undefined);
 
   return (
     <div
@@ -235,6 +299,22 @@ export function MaskEditor({
             </div>
           </Field>
 
+          <Field label="Borda" hint={`Cresce ou encolhe ${RESHAPE_STEP}px por clique.`}>
+            <div className="flex gap-1.5">
+              <ToolButton active={false} onClick={() => reshape(1)} icon="plus" disabled={!painted}>
+                expandir
+              </ToolButton>
+              <ToolButton
+                active={false}
+                onClick={() => reshape(-1)}
+                icon="close"
+                disabled={!painted}
+              >
+                contrair
+              </ToolButton>
+            </div>
+          </Field>
+
           <Slider
             label="Espessura"
             value={brush}
@@ -294,6 +374,19 @@ export function MaskEditor({
               Nada pintado ainda — sem máscara não há o que editar.
             </p>
           )}
+
+          {active.length > 0 && (
+            // Travas não são regiões: dizem o que preservar, não onde. Ficam à vista porque
+            // pintar sobre um aspecto travado é um pedido contraditório, e a pessoa merece
+            // saber disso antes de gastar crédito.
+            <p className="flex gap-2 rounded-md border border-state-warn/30 bg-state-warn/[0.06] px-3 py-2 text-micro leading-relaxed text-ink-secondary">
+              <Icon name="lock" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-state-warn" />
+              <span>
+                A cena trava {active.join(', ')}. A edição vai preservar{' '}
+                {active.length > 1 ? 'esses aspectos' : 'esse aspecto'} mesmo dentro da máscara.
+              </span>
+            </p>
+          )}
         </aside>
       </div>
     </div>
@@ -304,19 +397,22 @@ function ToolButton({
   active,
   onClick,
   icon,
+  disabled,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   icon: 'plus' | 'close' | 'trash';
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
-      className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 text-micro font-semibold transition-all duration-fast ease-out active:scale-[0.96] ${
+      className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 text-micro font-semibold transition-all duration-fast ease-out active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
         active
           ? 'border-accent bg-accent/10 text-ink-primary'
           : 'border-surface-border text-ink-muted hover:border-accent-40/60 hover:text-ink-secondary'

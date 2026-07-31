@@ -2,6 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import type { SceneSpec } from '@waymage/scene-spec';
 import { ApiError, api, type ExportJob, type GenerationResult } from '../lib/api';
 import { MaskEditor } from './mask-editor';
 import { Icon } from './ui/icons';
@@ -17,10 +18,12 @@ import { toast } from './ui/toast';
 export function ResultActions({
   result,
   projectId,
+  locks,
   onDerive,
 }: {
   result: GenerationResult;
   projectId: string;
+  locks: SceneSpec['locks'];
   /** Chamado quando uma derivação é criada, para o editor acompanhá-la. */
   onDerive: (jobId: string) => void;
 }) {
@@ -94,6 +97,7 @@ export function ResultActions({
           imageUrl={result.url}
           width={result.width}
           height={result.height}
+          locks={locks}
           onClose={() => setEditing(false)}
           onSubmit={onDerive}
         />

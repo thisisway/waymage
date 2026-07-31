@@ -40,8 +40,15 @@ export interface GenerationJobView {
   statusLabel: string;
   progress: number;
   operationType: OperationType;
-  /** Resultado de origem, em variação e refinamento. */
+  /** Resultado de origem, em variação, refinamento e edição. */
   sourceResultId: string | null;
+  /**
+   * A imagem de origem, resolvida.
+   *
+   * Vem junto para que o "antes e depois" não precise de uma segunda ida ao servidor — e
+   * porque o resultado de origem costuma estar noutro job, que a tela não tem em mãos.
+   */
+  sourceResult: GenerationResultView | null;
   requestedCount: number;
   selectedProvider: string | null;
   estimatedCredits: number;
@@ -487,6 +494,7 @@ export class GenerationsService {
       createdAt: job.createdAt,
       completedAt: job.completedAt,
       results: await Promise.all(job.results.map((result) => this.toResultView(result))),
+      sourceResult: job.sourceResult ? await this.toResultView(job.sourceResult) : null,
     };
   }
 
@@ -645,6 +653,7 @@ const jobSelect = {
   status: true,
   operationType: true,
   sourceResultId: true,
+  sourceResult: { select: resultSelect },
   requestedCount: true,
   selectedProvider: true,
   estimatedCredits: true,
