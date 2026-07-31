@@ -34,6 +34,7 @@ import {
   TextInput,
   Toggle,
 } from '../ui/controls';
+import { PositionPicker } from '../ui/position-picker';
 import { Icon } from '../ui/icons';
 import { LABELS } from './labels';
 import {
@@ -42,7 +43,6 @@ import {
   DepthPreview,
   DetailPreview,
   LightingPreview,
-  NegativeSpacePreview,
   PositionPreview,
   ShotPreview,
   TimePreview,
@@ -79,7 +79,7 @@ export function Inspector({
       aria-disabled={disabled}
     >
       <SectionCard
-        icon={<Icon name="target" />}
+        icon={<Icon name="intent" />}
         title="Intenção"
         summary={label(spec.intent.purpose)}
         defaultOpen
@@ -103,16 +103,17 @@ export function Inspector({
           placeholder="adultos interessados em terapia"
           onChange={(v) => patch('intent', { targetAudience: v || undefined })}
         />
-        <Segmented
+        <PositionPicker
           label="Posição do texto"
           value={spec.intent.textPlacement}
-          options={textPlacementSchema.options.map((v) => ({ value: v, label: label(v) }))}
+          options={textPlacementSchema.options}
+          hint="Onde o texto será sobreposto na peça final."
           onChange={(v) => patch('intent', { textPlacement: v })}
         />
       </SectionCard>
 
       <SectionCard
-        icon={<Icon name="person" />}
+        icon={<Icon name="subject" />}
         title="Sujeito"
         summary={spec.subject.description || 'a definir'}
         defaultOpen
@@ -141,6 +142,7 @@ export function Inspector({
             label: label(v),
             preview: <PositionPreview position={v} />,
           }))}
+          hint="O espaço negativo deve ficar do lado oposto."
           onChange={(v) => patch('subject', { position: v })}
         />
         <Slider
@@ -361,7 +363,7 @@ export function Inspector({
       </SectionCard>
 
       <SectionCard
-        icon={<Icon name="grid" />}
+        icon={<Icon name="composition" />}
         title="Composição"
         summary={label(spec.composition.rule)}
       >
@@ -375,15 +377,11 @@ export function Inspector({
           }))}
           onChange={(v) => patch('composition', { rule: v })}
         />
-        <OptionGrid
+        <PositionPicker
           label="Espaço negativo"
           value={spec.composition.negativeSpace}
-          options={negativeSpaceSchema.options.map((v) => ({
-            value: v,
-            label: label(v),
-            preview: <NegativeSpacePreview space={v} />,
-          }))}
-          hint="Não coloque o espaço negativo do mesmo lado do sujeito."
+          options={negativeSpaceSchema.options}
+          hint="A área que fica limpa. Não use o mesmo lado do sujeito."
           onChange={(v) => patch('composition', { negativeSpace: v })}
         />
         <Toggle
@@ -429,7 +427,7 @@ export function Inspector({
       </SectionCard>
 
       <SectionCard
-        icon={<Icon name="export" />}
+        icon={<Icon name="output" />}
         title="Saída"
         summary={`${spec.output.aspectRatio} · ${spec.output.count} · ${label(spec.output.quality)}`}
         defaultOpen

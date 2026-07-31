@@ -111,10 +111,15 @@ export function Field({
 }
 
 /**
- * Botões lado a lado, para 2–5 opções curtas.
+ * Botões lado a lado.
  *
- * O indicador ativo desliza entre as posições em vez de piscar no destino: o olho acompanha
- * o movimento e entende de onde para onde a seleção foi.
+ * Duas formas, escolhidas pelo conteúdo — porque a versão de largura igual **cortava o
+ * texto** quando havia seis opções num painel estreito, e rótulo cortado é pior que rótulo
+ * em duas linhas:
+ *
+ * - até 4 opções curtas: segmentos de largura igual, com indicador que desliza entre as
+ *   posições para o olho acompanhar de onde para onde a seleção foi;
+ * - acima disso: pílulas que quebram linha, cada uma do tamanho do próprio rótulo.
  */
 export function Segmented<T extends string>({
   label,
@@ -129,6 +134,41 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
   hint?: string;
 }) {
+  const longest = Math.max(...options.map((option) => option.label.length));
+  const wraps = options.length > 4 || longest > 10;
+
+  if (wraps) {
+    return (
+      <Field label={label} hint={hint}>
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => {
+            const active = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onChange(option.value)}
+                aria-pressed={active}
+                className={`rounded-pill px-3 py-1.5 text-micro font-semibold transition-all duration-fast ease-out active:scale-[0.96] ${
+                  active
+                    ? 'bg-accent text-white shadow-glow-sm'
+                    : 'bg-surface-overlay text-ink-secondary hover:bg-surface-hover hover:text-ink-primary'
+                }`}
+              >
+                {option.label}
+                {option.badge && (
+                  <span className={`ml-1.5 font-mono ${active ? 'opacity-70' : 'text-ink-muted'}`}>
+                    {option.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+    );
+  }
+
   const index = Math.max(
     0,
     options.findIndex((option) => option.value === value),
@@ -154,7 +194,7 @@ export function Segmented<T extends string>({
               type="button"
               onClick={() => onChange(option.value)}
               aria-pressed={active}
-              className={`relative z-10 flex-1 rounded-sm px-2 py-1.5 text-micro font-semibold transition-colors duration-fast ${
+              className={`relative z-10 flex-1 truncate rounded-sm px-2 py-1.5 text-micro font-semibold transition-colors duration-fast ${
                 active ? 'text-white' : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >

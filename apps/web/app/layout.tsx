@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { QueryProvider } from '../components/query-provider';
+import { ToastViewport } from '../components/ui/toast';
 import './globals.css';
 
 /**
@@ -27,7 +28,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" className={jakarta.variable}>
       <body className="min-h-screen font-sans">
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          {children}
+          <ToastViewport />
+        </QueryProvider>
       </body>
     </html>
   );

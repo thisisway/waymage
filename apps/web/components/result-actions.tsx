@@ -3,6 +3,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError, api, type ExportJob } from '../lib/api';
+import { Icon } from './ui/icons';
+import { toast } from './ui/toast';
 
 /**
  * Ações sobre um resultado (blueprint §22, "Depois").
@@ -23,13 +25,19 @@ export function ResultActions({
 
   const variation = useMutation({
     mutationFn: () => api.variation(resultId, crypto.randomUUID()),
-    onSuccess: (job) => onDerive(job.id),
+    onSuccess: (job) => {
+      toast.info('Variação na fila');
+      onDerive(job.id);
+    },
     onError: (caught) => setError(message(caught)),
   });
 
   const refine = useMutation({
     mutationFn: () => api.refine(resultId, crypto.randomUUID()),
-    onSuccess: (job) => onDerive(job.id),
+    onSuccess: (job) => {
+      toast.info('Refinamento na fila');
+      onDerive(job.id);
+    },
     onError: (caught) => setError(message(caught)),
   });
 
@@ -43,6 +51,7 @@ export function ResultActions({
           disabled={busy}
           title="Mesma cena, outra saída. Consome créditos."
         >
+          <Icon name="variation" className="h-3.5 w-3.5" />
           {variation.isPending ? 'variando…' : 'variar'}
         </ActionButton>
 
@@ -51,6 +60,7 @@ export function ResultActions({
           disabled={busy}
           title="Mesma imagem em qualidade final. Consome créditos."
         >
+          <Icon name="refine" className="h-3.5 w-3.5" />
           {refine.isPending ? 'refinando…' : 'refinar'}
         </ActionButton>
 
@@ -91,7 +101,12 @@ export function ExportButton({ resultIds }: { resultIds: string[] }) {
 
       throw new ApiError('EXPORT_TIMEOUT', 'A exportação demorou demais.', 504);
     },
-    onSuccess: (job) => download(job),
+    onSuccess: (job) => {
+      download(job);
+      toast.success(
+        job.files.length === 1 ? 'Arquivo baixado' : `${job.files.length} arquivos baixados`,
+      );
+    },
     onError: (caught) => setError(message(caught)),
   });
 
@@ -116,6 +131,7 @@ export function ExportButton({ resultIds }: { resultIds: string[] }) {
         disabled={exportJob.isPending}
         title="Baixa o arquivo. Não consome créditos."
       >
+        <Icon name="download" className="h-3.5 w-3.5" />
         {exportJob.isPending ? 'preparando…' : 'exportar'}
       </ActionButton>
 
@@ -145,7 +161,7 @@ function ActionButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLBut
     <button
       type="button"
       {...props}
-      className="rounded border border-surface-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-micro font-semibold text-ink-secondary transition-all duration-fast ease-out hover:border-accent-40/60 hover:text-ink-primary active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

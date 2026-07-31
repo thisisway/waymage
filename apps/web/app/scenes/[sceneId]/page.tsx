@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { validateSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   GenerationProgressBar,
   GenerationSummary,
@@ -14,6 +14,8 @@ import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
 import { CreditBadge } from '../../../components/credit-badge';
 import { Button } from '../../../components/ui/controls';
+import { Icon, Spinner } from '../../../components/ui/icons';
+import { toast } from '../../../components/ui/toast';
 import { SaveIndicator } from '../../../components/save-indicator';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
@@ -69,10 +71,12 @@ export default function SceneEditorPage() {
 
   const snapshot = useMutation({
     mutationFn: (changeSummary: string) => api.createVersion(sceneId, { changeSummary }),
-    onSuccess: () => {
+    onSuccess: (version) => {
+      toast.success(`Versão v${version.versionNumber} criada`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.versions(sceneId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.scene(sceneId) });
     },
+    onError: () => toast.error('Não foi possível criar a versão.'),
   });
 
   const versions = useQuery({
@@ -84,6 +88,38 @@ export default function SceneEditorPage() {
 
   // Comparação é estado efêmero da tela: quais dois resultados estão marcados agora.
   const [comparing, setComparing] = useState<string[]>([]);
+  /**
+   * Atalhos.
+   *
+   * Ctrl/⌘+Enter para gerar é o gesto que ferramentas criativas usam para "executar" — quem
+   * já usa outras o tenta sem instrução. Esc fecha a comparação porque é o que Esc faz.
+   *
+   * Ignorados enquanto o foco está num campo de texto: ali Enter e Esc pertencem ao campo.
+   */
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable === true;
+
+      if (event.key === 'Escape') {
+        setComparing([]);
+        return;
+      }
+      if (typing) return;
+
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        if (!generation.running) generation.start();
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [generation]);
+
   const toggleCompare = useCallback((resultId: string) => {
     setComparing((current) =>
       current.includes(resultId)
@@ -239,30 +275,20 @@ function TopBar({
           size="md"
           onClick={onGenerate}
           disabled={blocked || generating}
-          title={blocked ? 'Resolva os erros da cena antes de gerar' : undefined}
+          title={blocked ? 'Resolva os erros da cena antes de gerar' : 'Gerar (Ctrl+Enter)'}
           className={generating ? 'pulse-glow' : ''}
         >
-          {generating ? (
-            <span className="flex items-center gap-2">
-              <Spinner />
-              Gerando…
-            </span>
-          ) : (
-            'Gerar'
-          )}
+          <span className="flex items-center gap-1.5">
+            {generating ? (
+              <Spinner className="h-3.5 w-3.5" />
+            ) : (
+              <Icon name="sparkles" className="h-3.5 w-3.5" />
+            )}
+            {generating ? 'Gerando…' : 'Gerar'}
+          </span>
         </Button>
       </div>
     </header>
-  );
-}
-
-/** Indicador de atividade. Um anel girando diz "estou trabalhando" sem ocupar espaço. */
-function Spinner() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 animate-spin" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
   );
 }
 

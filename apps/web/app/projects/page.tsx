@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { ApiError, api, queryKeys, type Project } from '../../lib/api';
 import { timeAgo } from '../../lib/format';
+import { Icon } from '../../components/ui/icons';
 
 /**
  * Lista de projetos, no formato de navegador de arquivos.
@@ -118,27 +119,23 @@ export default function ProjectsPage() {
               onClick={() => setCreating((current) => !current)}
               className="flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-micro font-bold text-white shadow-glow-sm transition-all duration-fast ease-out hover:bg-accent-80 hover:shadow-glow active:scale-[0.97]"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-3.5 w-3.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.4}
-                strokeLinecap="round"
-                aria-hidden
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+              <Icon name="plus" className="h-3.5 w-3.5" />
               Novo projeto
             </button>
 
             <div className="flex rounded-md border border-surface-border p-0.5">
-              <ViewButton active={view === 'grid'} onClick={() => setView('grid')} label="Grade">
-                <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
-              </ViewButton>
-              <ViewButton active={view === 'list'} onClick={() => setView('list')} label="Lista">
-                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-              </ViewButton>
+              <ViewButton
+                active={view === 'grid'}
+                onClick={() => setView('grid')}
+                label="Grade"
+                icon="grid"
+              />
+              <ViewButton
+                active={view === 'list'}
+                onClick={() => setView('list')}
+                label="Lista"
+                icon="list"
+              />
             </div>
           </div>
         </div>
@@ -224,18 +221,7 @@ function ProjectCard({ project }: { project: Project }) {
 
       <div className="flex items-center gap-2.5 border-t border-surface-border px-3 py-2.5">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-accent/15 text-accent-40">
-          <svg
-            viewBox="0 0 24 24"
-            className="h-3 w-3"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M3 3h18v18H3zM3 15l5-5 4 4 3-3 6 6" />
-          </svg>
+          <Icon name="image" className="h-3 w-3" />
         </span>
 
         <span className="min-w-0 flex-1">
@@ -339,12 +325,12 @@ function ViewButton({
   active,
   onClick,
   label,
-  children,
+  icon,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
-  children: React.ReactNode;
+  icon: 'grid' | 'list';
 }) {
   return (
     <button
@@ -352,22 +338,12 @@ function ViewButton({
       onClick={onClick}
       aria-pressed={active}
       aria-label={label}
+      title={label}
       className={`rounded-sm p-1.5 transition-all duration-fast ease-out ${
         active ? 'bg-surface-overlay text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'
       }`}
     >
-      <svg
-        viewBox="0 0 24 24"
-        className="h-4 w-4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        {children}
-      </svg>
+      <Icon name={icon} />
     </button>
   );
 }
@@ -376,18 +352,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="animate-rise rounded-xl border border-dashed border-surface-border px-6 py-20 text-center">
       <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent-40">
-        <svg
-          viewBox="0 0 24 24"
-          className="h-6 w-6"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.6}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <path d="M3 3h18v18H3zM3 15l5-5 4 4 3-3 6 6" />
-        </svg>
+        <Icon name="image" className="h-6 w-6" />
       </span>
 
       <h2 className="mt-4 text-h3 text-ink-primary">Nenhum projeto ainda</h2>

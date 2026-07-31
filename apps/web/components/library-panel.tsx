@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { referenceRoleSchema, type SceneReference, type SceneSpec } from '@waymage/scene-spec';
 import { useRef, useState } from 'react';
 import { ApiError, api, queryKeys, uploadAsset, type Asset } from '../lib/api';
+import { Icon } from './ui/icons';
+import { toast } from './ui/toast';
 
 /**
  * Biblioteca de referências (blueprint §5.1, painel esquerdo).
@@ -49,7 +51,10 @@ export function LibraryPanel({
 
   const upload = useMutation({
     mutationFn: (file: File) => uploadAsset(projectId, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.assets(projectId) }),
+    onSuccess: () => {
+      toast.success('Referência enviada');
+      return queryClient.invalidateQueries({ queryKey: queryKeys.assets(projectId) });
+    },
     onError: (caught) =>
       setError(caught instanceof ApiError ? caught.message : 'Falha ao enviar o arquivo.'),
   });
@@ -60,6 +65,7 @@ export function LibraryPanel({
       // Apagar o asset precisa remover a referência da cena junto, senão o SceneSpec fica
       // apontando para algo que não existe mais e a gravação seguinte é recusada.
       onChange({ ...spec, references: spec.references.filter((r) => r.assetId !== assetId) });
+      toast.success('Referência excluída');
       void queryClient.invalidateQueries({ queryKey: queryKeys.assets(projectId) });
     },
   });
@@ -221,9 +227,9 @@ function AssetCard({
           type="button"
           onClick={onDelete}
           aria-label={`Excluir ${asset.originalName ?? 'referência'}`}
-          className="self-start text-xs text-ink-muted hover:text-state-error"
+          className="self-start text-ink-muted transition-colors hover:text-state-error"
         >
-          ×
+          <Icon name="trash" className="h-3.5 w-3.5" />
         </button>
       </div>
 

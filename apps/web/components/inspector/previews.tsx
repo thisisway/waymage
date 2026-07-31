@@ -100,47 +100,6 @@ export function PositionPreview({ position }: { position: 'left' | 'center' | 'r
   );
 }
 
-/** Espaço negativo: a área que fica deliberadamente vazia. */
-export function NegativeSpacePreview({
-  space,
-}: {
-  space: SceneSpec['composition']['negativeSpace'];
-}) {
-  const areas: Record<typeof space, { x: number; y: number; w: number; h: number } | null> = {
-    none: null,
-    left: { x: 1, y: 1, w: 40, h: 68 },
-    right: { x: 59, y: 1, w: 40, h: 68 },
-    top: { x: 1, y: 1, w: 98, h: 28 },
-    bottom: { x: 1, y: 41, w: 98, h: 28 },
-  };
-  const area = areas[space];
-
-  return (
-    <svg viewBox="0 0 100 70" className="h-full w-auto" aria-hidden>
-      <rect
-        x="1"
-        y="1"
-        width="98"
-        height="68"
-        rx="5"
-        className="fill-surface-base stroke-surface-border"
-      />
-      {area ? (
-        <rect
-          {...{ x: area.x, y: area.y, width: area.w, height: area.h }}
-          rx="4"
-          className="fill-accent/25 stroke-accent"
-          strokeDasharray="3 2"
-        />
-      ) : (
-        <text x="50" y="39" textAnchor="middle" className="fill-ink-muted text-[11px]">
-          —
-        </text>
-      )}
-    </svg>
-  );
-}
-
 /**
  * Iluminação: uma esfera com a luz aplicada.
  *
