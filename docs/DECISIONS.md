@@ -1268,6 +1268,66 @@ cobre `content-type`, `x-csrf-token` e `idempotency-key` sem manter a lista em d
 
 ---
 
+## D-070 — A chave do provedor e do usuario (BYOK), e creditos deixam de existir
+
+**Status:** aceita · substitui a [D-024](#d-024) e o modelo de creditos
+
+O produto passa a cobrar mensalidade pelo acesso, e cada workspace traz a propria chave de API
+para gerar. Consequencia direta: **nos deixamos de pagar o fornecedor**, e com isso some a
+razao de existir do sistema de creditos — reservar antes, capturar depois, devolver na falha,
+complementar no fallback. Essa maquinaria era complexa porque intermediava um pagamento que
+agora nao acontece.
+
+**O que muda no desenho, e nao e obvio:**
+
+O fallback automatico deixa de ser um favor. Hoje, quando um provedor falha, tentamos o proximo
+e devolvemos o credito — o prejuizo e nosso. Com a chave do usuario, tentar de novo gasta o
+dinheiro dele sem ele ter pedido. Vira escolha explicita.
+
+O peso de custo do roteador (0.15 na [D-056](#d-056)) perde sentido pelo mesmo motivo: nao cabe
+a nos escolher o modelo mais barato com a carteira dos outros. Passa a ser preferencia do
+usuario, nao politica nossa.
+
+**Sem chave, nao gera.** Bloqueio com mensagem que leva a tela de chaves, em vez de cair num
+modo de demonstracao com imagem que nao serve para nada. Os provedores fake continuam
+disponiveis **so em desenvolvimento**, para que `pnpm dev` funcione sem configuracao alguma.
+
+**O risco que entra no projeto:** guardar chave de terceiro e assumir a conta de nuvem do
+cliente. Se o banco vazar, quem recebe a fatura e ele. Por isso a cifra em repouso
+([D-071](#d-071)), o valor nunca voltando para a tela, e revogacao imediata.
+
+---
+
+## D-071 — A chave entra e nunca mais sai
+
+**Status:** aceita (BYOK)
+
+Nao existe rota que devolva o valor de uma credencial. Nem para quem a cadastrou, nem para o
+dono do workspace. O que a tela recebe sao os quatro ultimos caracteres — o bastante para
+reconhecer qual chave esta ali, pouco demais para ajudar quem a roubasse.
+
+E a unica garantia real. Um endpoint de leitura, por mais protegido, coloca a chave em resposta
+HTTP, em log de requisicao, em cache de browser e no historico de quem depurar o sistema. Cifrar
+em repouso e deixar uma porta de saida seria cifrar por educacao.
+
+Pelo mesmo motivo, `secretSealed` fica fora do `select` da listagem: o que nao e carregado nao
+vaza por engano num log de erro. E a auditoria registra que houve troca, nunca o que foi
+trocado — nem a dica.
+
+**Cifra:** AES-256-GCM com nonce por operacao. GCM porque autentica alem de cifrar — sem isso,
+quem escrevesse no banco poderia substituir o texto cifrado por uma chave escolhida por ele, e
+o servidor usaria sem perceber.
+
+**Validacao de prefixo** (`AIza` para o Google) existe so para errar cedo com mensagem util.
+Nao autoriza nada: prefixo certo nao prova chave valida, e o teste de verdade e o fornecedor
+aceitar na primeira geracao.
+
+**Consequencia operacional:** perder `CREDENTIALS_ENCRYPTION_KEY` torna toda credencial
+ilegivel, e o backup do Postgres sozinho nao restaura nada. Ela precisa de copia separada do
+banco.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

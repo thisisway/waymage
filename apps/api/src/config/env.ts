@@ -39,6 +39,16 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET precisa de ao menos 32 caracteres.'),
 
   /**
+   * Cifra as chaves de API que os usuários cadastram (BYOK).
+   *
+   * Perder este valor torna toda credencial ilegível — e o backup do Postgres sozinho não
+   * restaura nada. Guarde-o separado do banco.
+   */
+  CREDENTIALS_ENCRYPTION_KEY: z
+    .string()
+    .min(32, 'CREDENTIALS_ENCRYPTION_KEY precisa de ao menos 32 caracteres.'),
+
+  /**
    * `SameSite` dos cookies de sessão.
    *
    * `lax` serve quando web e API compartilham o site registrável (`app.dominio.com` e

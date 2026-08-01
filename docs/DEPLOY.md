@@ -173,6 +173,7 @@ API_PORT=3333
 DATABASE_URL=<URL interna do Postgres, do passo 2>
 REDIS_URL=<URL interna do Redis, do passo 3>
 JWT_ACCESS_SECRET=<o segredo do passo 0>
+CREDENTIALS_ENCRYPTION_KEY=<um SEGUNDO segredo, gerado do mesmo jeito>
 APP_URL=http://localhost:3000
 TRUST_PROXY=true
 COOKIE_SAMESITE=lax
