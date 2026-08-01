@@ -117,16 +117,14 @@ describe('estimativa', () => {
 
     const estimate = JSON.parse(response.body) as {
       provider: string;
-      credits: number;
       count: number;
       prompt: string;
       summary: string;
       canGenerate: boolean;
-      alternatives: { provider: string; eligible: boolean; credits: number; score: number }[];
+      alternatives: { provider: string; eligible: boolean; score: number }[];
     };
 
     expect(estimate.provider).toBe('fake-rapido');
-    expect(estimate.credits).toBeGreaterThan(0);
     expect(estimate.count).toBe(4);
     expect(estimate.prompt.length).toBeGreaterThan(50);
     expect(estimate.summary).toContain('4 imagens');
@@ -137,7 +135,6 @@ describe('estimativa', () => {
     // decisão de roteamento fora do sistema.
     expect(estimate.alternatives.length).toBeGreaterThan(1);
     expect(estimate.alternatives[0]?.provider).toBe(estimate.provider);
-    expect(estimate.alternatives[0]?.credits).toBe(estimate.credits);
     // Ordenada por pontuação, do melhor para o pior.
     const scores = estimate.alternatives.filter((a) => a.eligible).map((a) => a.score);
     expect([...scores].sort((a, b) => b - a)).toEqual(scores);
@@ -178,12 +175,10 @@ describe('criação da geração', () => {
       status: string;
       sceneVersionId: string;
       requestedCount: number;
-      estimatedCredits: number;
     };
 
     expect(job.status).toBe('QUEUED');
     expect(job.requestedCount).toBe(4);
-    expect(job.estimatedCredits).toBeGreaterThan(0);
 
     // O snapshot é o que garante que editar a cena depois não muda o que gerou a imagem.
     const version = await prisma.sceneVersion.findUniqueOrThrow({

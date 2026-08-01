@@ -83,17 +83,15 @@ async function seedResult(
     (await call(session, 'POST', `/projects/${session.projectId}/scenes`, { name: 'Cena' })).body,
   ) as { id: string };
 
-  const job = JSON.parse(
-    (
-      await call(
-        session,
-        'POST',
-        '/generation-jobs',
-        { sceneId: scene.id },
-        { 'idempotency-key': randomUUID() },
-      )
-    ).body,
-  ) as { id: string };
+  const response = await call(
+    session,
+    'POST',
+    '/generation-jobs',
+    { sceneId: scene.id },
+    { 'idempotency-key': randomUUID() },
+  );
+  expect(response.statusCode, response.body).toBe(202);
+  const job = JSON.parse(response.body) as { id: string };
 
   const full = await prisma.generationJob.findUniqueOrThrow({
     where: { id: job.id },
@@ -174,23 +172,6 @@ describe('variação', () => {
     expect(variation.requestedCount).toBe(4);
   }, 60_000);
 
-  it('reserva créditos como qualquer geração', async () => {
-    const session = await setup('variacao-credito');
-    const { resultId } = await seedResult(session);
-
-    const before = JSON.parse((await call(session, 'GET', '/billing/wallet')).body) as {
-      balance: number;
-    };
-    await call(session, 'POST', `/generation-results/${resultId}/variation`);
-    const after = JSON.parse((await call(session, 'GET', '/billing/wallet')).body) as {
-      balance: number;
-      reserved: number;
-    };
-
-    expect(after.balance).toBeLessThan(before.balance);
-    expect(after.reserved).toBeGreaterThan(0);
-  }, 60_000);
-
   it('a mesma idempotency key não cria duas variações', async () => {
     const session = await setup('variacao-idem');
     const { resultId } = await seedResult(session);
@@ -222,13 +203,12 @@ describe('refinamento', () => {
 
     const refine = JSON.parse(
       (await call(session, 'POST', `/generation-results/${resultId}/refine`)).body,
-    ) as { operationType: string; requestedCount: number; estimatedCredits: number };
+    ) as { operationType: string; requestedCount: number };
 
     expect(refine.operationType).toBe('REFINE');
     // O usuário já escolheu a saída; renderizar quatro vezes em qualidade final seria
     // desperdício de crédito.
     expect(refine.requestedCount).toBe(1);
-    expect(refine.estimatedCredits).toBeGreaterThan(0);
   }, 60_000);
 });
 

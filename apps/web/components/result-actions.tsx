@@ -57,7 +57,7 @@ export function ResultActions({
         <ActionButton
           onClick={() => variation.mutate()}
           disabled={busy}
-          title="Mesma cena, outra saída. Consome créditos."
+          title="Mesma cena, outra saída. Consome cota do seu provedor."
         >
           <Icon name="variation" className="h-3.5 w-3.5" />
           {variation.isPending ? 'variando…' : 'variar'}
@@ -66,7 +66,7 @@ export function ResultActions({
         <ActionButton
           onClick={() => refine.mutate()}
           disabled={busy}
-          title="Mesma imagem em qualidade final. Consome créditos."
+          title="Mesma imagem em qualidade final. Consome cota do seu provedor."
         >
           <Icon name="refine" className="h-3.5 w-3.5" />
           {refine.isPending ? 'refinando…' : 'refinar'}
@@ -75,7 +75,7 @@ export function ResultActions({
         <ActionButton
           onClick={() => setEditing(true)}
           disabled={busy || !result.url}
-          title="Pintar uma região e descrever a mudança. Consome créditos."
+          title="Pintar uma região e descrever a mudança. Consome cota do seu provedor."
         >
           <Icon name="brush" className="h-3.5 w-3.5" />
           editar
@@ -159,7 +159,7 @@ export function ExportButton({ resultIds }: { resultIds: string[] }) {
           exportJob.mutate();
         }}
         disabled={exportJob.isPending}
-        title="Baixa o arquivo. Não consome créditos."
+        title="Baixa o arquivo. Não chama o provedor."
       >
         <Icon name="download" className="h-3.5 w-3.5" />
         {exportJob.isPending ? 'preparando…' : 'exportar'}

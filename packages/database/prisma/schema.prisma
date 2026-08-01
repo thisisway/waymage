@@ -112,16 +112,6 @@ enum ModerationVerdict {
   BLOCK
 }
 
-enum CreditTransactionType {
-  PURCHASE
-  BONUS
-  RESERVATION
-  CAPTURE
-  RELEASE
-  REFUND
-  ADMIN_ADJUSTMENT
-}
-
 enum ExportStatus {
   QUEUED
   PROCESSING
@@ -194,7 +184,6 @@ model Workspace {
   assets              Asset[]
   generationJobs      GenerationJob[]
   brandKits           BrandKit[]
-  wallet              CreditWallet?
   usageLedger         UsageLedger[]
   auditLogs           AuditLog[]
   consentRecords      ConsentRecord[]
@@ -392,9 +381,6 @@ model GenerationJob {
   /// "auto" delega ao ModelRouter; qualquer outro valor força um provedor.
   providerStrategy String           @default("auto")
   selectedProvider String?
-  estimatedCredits Int              @default(0)
-  reservedCredits  Int              @default(0)
-  actualCredits    Int?
   /// Escopada ao workspace: a mesma chave nunca executa duas vezes.
   idempotencyKey   String
   errorCode        String?
@@ -417,7 +403,6 @@ model GenerationJob {
   providerRuns  ProviderRun[]
   compilations  PromptCompilation[]
   usage         UsageLedger[]
-  transactions  CreditTransaction[]
   moderation    ModerationDecision[]
   editOperation EditOperation?
 
@@ -572,47 +557,6 @@ model BrandKit {
 
 // ─── Créditos ────────────────────────────────────────────────────────────────
 
-/// Saldo em créditos inteiros — nunca ponto flutuante para dinheiro.
-/// `balance` é cache do ledger; `reserved` é o que está preso em jobs em voo.
-model CreditWallet {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @unique @db.Uuid
-  balance     Int      @default(0)
-  reserved    Int      @default(0)
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
-
-  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  transactions CreditTransaction[]
-
-  @@map("credit_wallets")
-}
-
-/// Append-only. Nunca sofre UPDATE nem DELETE — a soma reconstrói o saldo.
-model CreditTransaction {
-  id              String                @id @default(uuid()) @db.Uuid
-  workspaceId     String                @db.Uuid
-  walletId        String                @db.Uuid
-  type            CreditTransactionType
-  /// Assinado: positivo credita, negativo debita.
-  amount          Int
-  /// Saldo resultante, para conferência sem varrer a tabela inteira.
-  balanceAfter    Int
-  generationJobId String?               @db.Uuid
-  /// Impede que um retry debite duas vezes.
-  idempotencyKey  String
-  note            String?
-  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
-
-  wallet CreditWallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  job    GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
-
-  @@unique([workspaceId, idempotencyKey])
-  @@index([walletId, createdAt])
-  @@index([workspaceId, createdAt(sort: Desc)])
-  @@map("credit_transactions")
-}
-
 /// Custo interno vs. custo real do provedor, por job. Base das métricas de margem.
 model UsageLedger {
   id                String   @id @default(uuid()) @db.Uuid
@@ -620,7 +564,6 @@ model UsageLedger {
   generationJobId   String   @db.Uuid
   provider          String
   imagesProduced    Int      @default(0)
-  creditsCharged    Int      @default(0)
   /// Centavos de USD.
   externalCostCents Int      @default(0)
   createdAt         DateTime @default(now()) @db.Timestamptz(6)

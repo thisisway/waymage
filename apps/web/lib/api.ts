@@ -343,7 +343,6 @@ export interface GenerationJob {
   progress: number;
   requestedCount: number;
   selectedProvider: string | null;
-  estimatedCredits: number;
   errorCode: string | null;
   errorMessage: string | null;
   createdAt: string;
@@ -354,7 +353,6 @@ export interface GenerationJob {
 export interface ProviderAlternative {
   provider: string;
   eligible: boolean;
-  credits: number;
   estimatedSeconds: number;
   score: number;
   notes: string[];
@@ -362,7 +360,6 @@ export interface ProviderAlternative {
 
 export interface Estimate {
   provider: string;
-  credits: number;
   estimatedSeconds: number;
   count: number;
   summary: string;
@@ -372,31 +369,6 @@ export interface Estimate {
   canGenerate: boolean;
   /** Todos os provedores considerados, do melhor para o pior. */
   alternatives: ProviderAlternative[];
-}
-
-export interface Wallet {
-  /** Disponível para gastar. Já desconta o que está reservado. */
-  balance: number;
-  /** Preso em gerações em voo. Volta ao saldo se a geração falhar. */
-  reserved: number;
-}
-
-export interface CreditTransaction {
-  id: string;
-  type: string;
-  amount: number;
-  balanceAfter: number;
-  generationJobId: string | null;
-  note: string | null;
-  createdAt: string;
-}
-
-export interface UsageEntry {
-  provider: string;
-  imagesProduced: number;
-  creditsCharged: number;
-  externalCostCents: number;
-  createdAt: string;
 }
 
 /** Evento de progresso recebido pelo SSE. */
@@ -513,12 +485,6 @@ export const api = {
     apiFetch<ExportJob>('/exports', { method: 'POST', body: { resultIds, format } }),
 
   getExport: (exportId: string) => apiFetch<ExportJob>(`/exports/${exportId}`),
-
-  wallet: () => apiFetch<Wallet>('/billing/wallet'),
-
-  transactions: () => apiFetch<CreditTransaction[]>('/billing/transactions'),
-
-  usage: () => apiFetch<UsageEntry[]>('/billing/usage'),
 };
 
 /**
@@ -599,7 +565,4 @@ export const queryKeys = {
   generation: (jobId: string) => ['generation-jobs', jobId] as const,
   estimate: (sceneId: string) => ['scenes', sceneId, 'estimate'] as const,
   export: (exportId: string) => ['exports', exportId] as const,
-  wallet: ['billing', 'wallet'] as const,
-  transactions: ['billing', 'transactions'] as const,
-  usage: ['billing', 'usage'] as const,
 };

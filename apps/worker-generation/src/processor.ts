@@ -1,4 +1,3 @@
-import { captureCredits, recordUsage, releaseCredits, reserveCredits } from '@waymage/billing';
 import {
   AssetKind,
   AssetStatus,
@@ -30,6 +29,7 @@ import type { Logger } from 'pino';
 import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
+import { recordUsage } from './usage';
 import { isBlocking, moderateImage, moderateText, recordDecision } from './moderation';
 import { recentReliability, resolveCandidates, routingContext } from './providers';
 import { runProviderJob } from './run-provider-job';
@@ -83,7 +83,6 @@ export async function processGenerationJob(
       requestedCount: true,
       providerStrategy: true,
       operationType: true,
-      reservedCredits: true,
       sceneVersion: { select: { id: true, sceneSpec: true } },
       sourceResult: { select: { seed: true, asset: { select: { storageKey: true } } } },
       editOperation: {
@@ -391,49 +390,11 @@ export async function processGenerationJob(
      * outra. Rejeicao por politica de conteudo nao e motivo para tentar de novo: o pedido e o
      * mesmo, e o proximo fornecedor recusaria igual, cobrando por isso.
      */
-    /**
-     * Completa a reserva quando o candidato custa mais do que ja esta reservado.
-     *
-     * Reservar o pior caso la na API travaria credito de um fallback que quase nunca
-     * acontece — com dois provedores de precos diferentes, o usuario veria o triplo do saldo
-     * preso em toda geracao. Aqui so se paga pela troca quando a troca ocorre; e se o saldo
-     * nao cobrir, a falha e de credito e nao adianta tentar o proximo.
-     */
-    const topUpReservation = async (provider: ImageProvider, current: number) => {
-      const { credits } = await provider.estimateCost({
-        requestId: payload.requestId,
-        prompt: '',
-        references: [],
-        aspectRatio: spec.output.aspectRatio,
-        format: spec.output.format,
-        count: record.requestedCount,
-        mode,
-      });
-
-      if (credits <= current) return current;
-
-      await reserveCredits(prisma, {
-        workspaceId: payload.workspaceId,
-        amount: credits - current,
-        generationJobId: record.id,
-        idempotencyKey: `topup:${record.id}:${provider.id}`,
-      });
-
-      await prisma.generationJob.update({
-        where: { id: record.id },
-        data: { reservedCredits: credits },
-      });
-
-      return credits;
-    };
-
-    let reserved = record.reservedCredits;
     const attempts = candidates.slice(0, MAX_PROVIDER_ATTEMPTS);
     let outcome: Awaited<ReturnType<typeof attempt>> | null = null;
 
     for (const [index, candidate] of attempts.entries()) {
       try {
-        reserved = await topUpReservation(candidate, reserved);
         outcome = await attempt(candidate, index + 1);
         break;
       } catch (error) {
@@ -523,71 +484,24 @@ export async function processGenerationJob(
       ),
     );
 
-    // A reserva acompanhou a escolha: o que esta reservado e exatamente o preco de quem
-    // executou, inclusive quando houve fallback e a reserva foi complementada.
-    const charged = reserved;
-
-    if (charged > 0) {
-      await captureCredits(prisma, {
-        workspaceId: payload.workspaceId,
-        amount: charged,
-        generationJobId: record.id,
-        idempotencyKey: `capture:${record.id}`,
-      });
-    }
-
     await recordUsage(prisma, {
       workspaceId: payload.workspaceId,
       generationJobId: record.id,
       provider: provider.id,
       imagesProduced: stored.length,
-      creditsCharged: charged,
       externalCostCents: status.externalCostCents ?? 0,
     });
 
     await advance('EVALUATING', 'COMPLETED', `${stored.length} imagens geradas`);
     await prisma.generationJob.update({
       where: { id: record.id },
-      data: { completedAt: new Date(), actualCredits: charged },
+      data: { completedAt: new Date() },
     });
 
     log.info({ count: stored.length, provider: provider.id }, 'Geração concluída');
     return { resultIds: stored.map((result) => result.id) };
   } catch (error) {
     const providerError = error instanceof ProviderError ? error : null;
-
-    /**
-     * Quem paga a falha.
-     *
-     * Falha de provedor, timeout e erro interno são nossos: o usuário não recebeu imagem
-     * nenhuma e o crédito volta. Rejeição por política de conteúdo é a exceção — ali o
-     * pedido partiu do usuário e o custo foi incorrido, então a reserva é capturada.
-     */
-    // Recarrega do banco: o fallback pode ter complementado a reserva depois da leitura
-    // inicial, e liberar o valor antigo deixaria credito preso para sempre.
-    const outstanding =
-      (
-        await prisma.generationJob.findUnique({
-          where: { id: payload.generationJobId },
-          select: { reservedCredits: true },
-        })
-      )?.reservedCredits ?? 0;
-
-    if (outstanding > 0) {
-      const refundable = providerError?.refundable ?? true;
-      const settle = refundable ? releaseCredits : captureCredits;
-
-      await settle(prisma, {
-        workspaceId: payload.workspaceId,
-        amount: outstanding,
-        generationJobId: record.id,
-        idempotencyKey: `${refundable ? 'release' : 'capture'}:${record.id}`,
-        note: refundable ? 'Falha na geração' : 'Rejeitado por política de conteúdo',
-      }).catch((settleError: unknown) => {
-        // Falha ao acertar o crédito não pode esconder o erro original.
-        log.error({ err: settleError }, 'Falha ao acertar créditos após erro de geração');
-      });
-    }
 
     await prisma.generationJob.update({
       where: { id: record.id },

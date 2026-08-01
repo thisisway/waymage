@@ -67,7 +67,7 @@ curl http://localhost:3333/health
 ```
 
 Depois abra http://localhost:3000, crie uma conta, um projeto e uma cena, e clique em
-**Gerar**. O cadastro já cria o workspace e a carteira; a cena nasce com um SceneSpec válido,
+**Gerar**. O cadastro já cria o workspace; a cena nasce com um SceneSpec válido,
 o editor salva sozinho 800 ms depois de cada alteração, e a geração produz 4 imagens com
 progresso em tempo real — sem nenhuma chave de API.
 

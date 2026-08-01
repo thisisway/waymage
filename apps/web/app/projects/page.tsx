@@ -98,12 +98,6 @@ export default function ProjectsPage() {
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface-base/95 px-6 py-3 backdrop-blur">
         <span className="text-h3 text-ink-primary">Waymage</span>
         <div className="flex items-center gap-5 text-micro">
-          <a
-            href="/billing"
-            className="font-semibold text-ink-secondary transition-colors hover:text-accent-40"
-          >
-            créditos
-          </a>
           <span className="text-ink-muted">{session.data.user.email}</span>
           <button
             type="button"

@@ -56,9 +56,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       <div className="animate-rise relative w-full max-w-sm rounded-xl border border-surface-border bg-surface-raised p-8 shadow-lg">
         <h1 className="text-h2 text-ink-primary">Waymage</h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
-          {isRegister
-            ? 'Crie sua conta e comece com 100 créditos.'
-            : 'Entre para continuar de onde parou.'}
+          {isRegister ? 'Crie sua conta para começar.' : 'Entre para continuar de onde parou.'}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

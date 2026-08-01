@@ -16,7 +16,7 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
   });
 
   if (!estimate.data) return null;
-  const { credits, estimatedSeconds, provider, summary, warnings, canGenerate, alternatives } =
+  const { count, estimatedSeconds, provider, summary, warnings, canGenerate, alternatives } =
     estimate.data;
 
   // Só o descartado interessa: repetir o escolhido, que já está em destaque acima, seria
@@ -30,8 +30,8 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
       <dl className="mt-3 grid grid-cols-3 gap-2">
         {[
           ['provedor', provider],
-          ['custo', `${credits} créditos`],
           ['tempo', `~${estimatedSeconds}s`],
+          ['imagens', String(count)],
         ].map(([term, value]) => (
           <div key={term} className="rounded-md bg-surface-overlay px-3 py-2">
             <dt className="text-micro uppercase tracking-wide text-ink-muted">{term}</dt>
@@ -51,7 +51,6 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
                 <span className={entry.eligible ? 'text-ink-secondary' : 'text-ink-muted'}>
                   {entry.eligible ? '·' : '✕'} {entry.provider}
                 </span>
-                {entry.eligible && <span className="font-mono">{entry.credits} créditos</span>}
                 <span className="text-ink-muted">
                   {entry.notes.length > 0
                     ? entry.notes.join('; ')

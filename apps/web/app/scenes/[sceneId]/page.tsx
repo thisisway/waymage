@@ -14,7 +14,6 @@ import {
 import { ResultCompare } from '../../../components/result-compare';
 import { Inspector } from '../../../components/inspector/inspector';
 import { LibraryPanel } from '../../../components/library-panel';
-import { CreditBadge } from '../../../components/credit-badge';
 import { Button } from '../../../components/ui/controls';
 import { Icon, Spinner } from '../../../components/ui/icons';
 import { toast } from '../../../components/ui/toast';
@@ -270,7 +269,6 @@ function TopBar({
       </div>
 
       <div className="flex items-center gap-3 text-xs">
-        <CreditBadge />
         <ModeSelector />
         <Button variant="secondary" size="sm" onClick={onSnapshot} disabled={snapshotting}>
           {snapshotting ? 'Salvando…' : 'Criar versão'}

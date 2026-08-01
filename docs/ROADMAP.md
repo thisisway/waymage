@@ -1,6 +1,10 @@
 # Roadmap
 
-Estado atual: **Fases 1 a 8 concluídas; Fases 9 e 10 parciais.** O roteamento, o fallback e a suíte
+Estado atual: **Fases 1 a 8 concluídas; Fases 9 e 10 parciais.** O modelo de negócio mudou
+para mensalidade + chave do próprio usuário (BYOK, D-070): os créditos foram removidos, e o
+que falta do BYOK é o adapter real do provedor.
+
+Estado anterior: O roteamento, o fallback e a suíte
 de contrato estão prontos e verificados contra dois provedores fake de perfis diferentes. Os
 dois adapters reais dependem de chave de API e, portanto, de autorização.
 

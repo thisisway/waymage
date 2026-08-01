@@ -1,11 +1,9 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { WELCOME_CREDITS } from '@waymage/billing';
 import { WorkspaceRole } from '@waymage/database';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../common/app-error';
 import { AuditService } from '../audit/audit.service';
-import { BillingService } from '../billing/billing.service';
 import { PrismaService } from '../infra/prisma.service';
 import type { LoginInput, RegisterInput } from './auth.schemas';
 import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from './password';
@@ -45,7 +43,6 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
-    private readonly billing: BillingService,
   ) {}
 
   async register(
@@ -70,8 +67,8 @@ export class AuthService {
     const passwordHash = await hashPassword(input.password);
     const workspaceName = input.workspaceName ?? `Workspace de ${input.name}`;
 
-    // Usuário, workspace, associação de dono e carteira nascem juntos ou não nascem:
-    // um usuário sem workspace não conseguiria fazer absolutamente nada no produto.
+    // Usuário, workspace e associação de dono nascem juntos ou não nascem: um usuário sem
+    // workspace não conseguiria fazer absolutamente nada no produto.
     const { user, workspace } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { email: input.email, name: input.name, passwordHash },
@@ -83,17 +80,12 @@ export class AuthService {
           name: workspaceName,
           slug: await this.uniqueSlug(tx, workspaceName),
           members: { create: { userId: user.id, role: WorkspaceRole.OWNER } },
-          wallet: { create: {} },
         },
         select: { id: true },
       });
 
       return { user, workspace };
     });
-
-    // Créditos de boas-vindas: sem eles, a primeira coisa que o usuário encontra depois de
-    // se cadastrar é uma tela dizendo que não pode gerar nada.
-    await this.billing.welcome(workspace.id, WELCOME_CREDITS);
 
     const tokens = await this.issueSession(user.id, user.email);
 

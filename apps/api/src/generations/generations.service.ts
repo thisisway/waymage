@@ -19,7 +19,6 @@ import {
 import { promptCompiler } from '@waymage/prompt-compiler';
 import { hasBlockingIssues, parseSceneSpec, validateSceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
-import { BillingService } from '../billing/billing.service';
 import { AppError } from '../common/app-error';
 import { PrismaService } from '../infra/prisma.service';
 import { AppStorageService } from '../infra/storage.service';
@@ -59,7 +58,6 @@ export interface GenerationJobView {
   sourceResult: GenerationResultView | null;
   requestedCount: number;
   selectedProvider: string | null;
-  estimatedCredits: number;
   errorCode: string | null;
   errorMessage: string | null;
   createdAt: Date;
@@ -98,7 +96,6 @@ export interface ProviderRunView {
 export interface ProviderAlternative {
   provider: string;
   eligible: boolean;
-  credits: number;
   estimatedSeconds: number;
   /** 0..1 pelos pesos do blueprint §11.3. Só comparável entre elegíveis. */
   score: number;
@@ -108,7 +105,6 @@ export interface ProviderAlternative {
 
 export interface EstimateView {
   provider: string;
-  credits: number;
   estimatedSeconds: number;
   count: number;
   /** Todos os provedores considerados, do melhor para o pior. */
@@ -147,7 +143,6 @@ export class GenerationsService {
     private readonly queue: GenerationQueueService,
     private readonly storage: AppStorageService,
     private readonly audit: AuditService,
-    private readonly billing: BillingService,
   ) {}
 
   /** Prévia do que vai acontecer, antes de gastar qualquer coisa (blueprint §22). */
@@ -197,7 +192,6 @@ export class GenerationsService {
 
     return {
       provider: chosen?.provider ?? 'nenhum',
-      credits: chosen?.credits ?? 0,
       estimatedSeconds: Math.ceil(
         ((chosen?.estimatedLatencyMs ?? 0) * scene.sceneSpec.output.count) / 1000,
       ),
@@ -207,7 +201,6 @@ export class GenerationsService {
       alternatives: ranked.map((entry) => ({
         provider: entry.provider,
         eligible: entry.eligible,
-        credits: entry.credits,
         estimatedSeconds: Math.ceil(
           (entry.estimatedLatencyMs * scene.sceneSpec.output.count) / 1000,
         ),
@@ -288,39 +281,10 @@ export class GenerationsService {
         operationType: input.operationType ?? OperationType.TEXT_TO_IMAGE,
         requestedCount: scene.sceneSpec.output.count,
         providerStrategy: scene.sceneSpec.advanced.provider,
-        estimatedCredits: chosen.credits,
-        reservedCredits: 0,
         idempotencyKey,
         createdById: principal.user.id,
       },
       select: { id: true },
-    });
-
-    // Reserva ANTES de enfileirar. O worker só é acionado com o crédito já preso: enfileirar
-    // primeiro abriria uma janela em que a geração roda e o pagamento falha depois.
-    try {
-      await this.billing.reserve({
-        workspaceId: principal.workspaceId,
-        amount: chosen.credits,
-        generationJobId: job.id,
-      });
-    } catch (error) {
-      // Sem crédito, o job não deve existir: deixá-lo em QUEUED faria o worker pegá-lo.
-      await this.prisma.generationJob.update({
-        where: { id: job.id },
-        data: {
-          status: GenerationStatus.FAILED,
-          completedAt: new Date(),
-          errorCode: 'INSUFFICIENT_CREDITS',
-          errorMessage: 'Créditos insuficientes.',
-        },
-      });
-      throw error;
-    }
-
-    await this.prisma.generationJob.update({
-      where: { id: job.id },
-      data: { reservedCredits: chosen.credits },
     });
 
     await this.queue.enqueue({
@@ -451,7 +415,10 @@ export class GenerationsService {
             ? ('final' as const)
             : ('draft' as const);
 
-    const chosen = await this.route({
+    // Rotear aqui não escolhe nada que o worker vá reusar — ele roteia de novo, com dados de
+    // confiabilidade mais frescos. Serve para recusar cedo: se nenhum provedor atende a esta
+    // operação, é melhor dizer agora do que enfileirar um job condenado.
+    await this.route({
       ...routingFor(spec, mode === 'edit' ? 'final' : mode),
       operation,
       count,
@@ -470,8 +437,6 @@ export class GenerationsService {
         operationType: operation as OperationType,
         requestedCount: count,
         providerStrategy: source.job.providerStrategy,
-        estimatedCredits: chosen.credits,
-        reservedCredits: 0,
         idempotencyKey,
         createdById: principal.user.id,
       },
@@ -502,30 +467,6 @@ export class GenerationsService {
         },
       });
     }
-
-    try {
-      await this.billing.reserve({
-        workspaceId: principal.workspaceId,
-        amount: chosen.credits,
-        generationJobId: job.id,
-      });
-    } catch (error) {
-      await this.prisma.generationJob.update({
-        where: { id: job.id },
-        data: {
-          status: GenerationStatus.FAILED,
-          completedAt: new Date(),
-          errorCode: 'INSUFFICIENT_CREDITS',
-          errorMessage: 'Créditos insuficientes.',
-        },
-      });
-      throw error;
-    }
-
-    await this.prisma.generationJob.update({
-      where: { id: job.id },
-      data: { reservedCredits: chosen.credits },
-    });
 
     await this.queue.enqueue({
       generationJobId: job.id,
@@ -569,7 +510,6 @@ export class GenerationsService {
       sourceResultId: job.sourceResultId,
       requestedCount: job.requestedCount,
       selectedProvider: job.selectedProvider,
-      estimatedCredits: job.estimatedCredits,
       errorCode: job.errorCode,
       errorMessage: job.errorMessage,
       createdAt: job.createdAt,
@@ -619,7 +559,7 @@ export class GenerationsService {
   ): Promise<GenerationJobView> {
     const job = await this.prisma.generationJob.findFirst({
       where: { id: jobId, workspaceId: principal.workspaceId },
-      select: { id: true, status: true, reservedCredits: true },
+      select: { id: true, status: true },
     });
     if (!job) throw AppError.notFound('Geração');
 
@@ -639,16 +579,6 @@ export class GenerationsService {
         errorCode: 'CANCELLED_BY_USER',
       },
     });
-
-    // Cancelou antes de receber imagem: o crédito volta.
-    if (job.reservedCredits > 0) {
-      await this.billing.release({
-        workspaceId: principal.workspaceId,
-        amount: job.reservedCredits,
-        generationJobId: job.id,
-        note: 'Geração cancelada pelo usuário',
-      });
-    }
 
     await this.audit.record({
       workspaceId: principal.workspaceId,
@@ -787,7 +717,6 @@ const jobSelect = {
   sourceResult: { select: resultSelect },
   requestedCount: true,
   selectedProvider: true,
-  estimatedCredits: true,
   errorCode: true,
   errorMessage: true,
   createdAt: true,
