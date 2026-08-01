@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { API_URL, fetchHealth, type HealthReport } from '../lib/api';
+import { apiUrl, fetchHealth, type HealthReport } from '../lib/api';
 
 type State =
   { kind: 'loading' } | { kind: 'ready'; report: HealthReport } | { kind: 'unreachable' };
@@ -37,7 +37,7 @@ export function SystemStatus() {
   if (state.kind === 'unreachable') {
     return (
       <span className="text-xs text-state-error">
-        API inacessível em {API_URL} — rode <code className="font-mono">pnpm dev</code>
+        API inacessível em {apiUrl()} — rode <code className="font-mono">pnpm dev</code>
       </span>
     );
   }

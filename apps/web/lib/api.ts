@@ -1,7 +1,29 @@
 import type { SceneSpec } from '@waymage/scene-spec';
 
-/** URL base da API. Injetada em build (next.config.mjs) — nunca contém segredo. */
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+declare global {
+  interface Window {
+    __WAYMAGE_API_URL__?: string;
+  }
+}
+
+/**
+ * URL base da API, resolvida em runtime.
+ *
+ * Uma função, e não uma constante de módulo, porque o valor não existe no bundle: ele é
+ * injetado pelo servidor em cada resposta (ver `app/layout.tsx`) e lido aqui na hora da
+ * chamada. Constante seria avaliada na carga do módulo, que pode acontecer antes do script
+ * de configuração.
+ *
+ * `NEXT_PUBLIC_API_URL` continua valendo como padrão de build — é o que serve o
+ * desenvolvimento local, onde a URL nunca muda. Em produção ela seria embutida na imagem, e
+ * trocar de ambiente exigiria rebuild.
+ */
+export function apiUrl(): string {
+  if (typeof window !== 'undefined' && window.__WAYMAGE_API_URL__) {
+    return window.__WAYMAGE_API_URL__;
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+}
 
 const CSRF_COOKIE = 'wm_csrf';
 const CSRF_HEADER = 'x-csrf-token';
@@ -60,7 +82,7 @@ export async function apiFetch<T>(
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   if (method !== 'GET' && method !== 'HEAD') headers[CSRF_HEADER] = csrfToken();
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl()}${path}`, {
     method,
     headers,
     credentials: 'include',
@@ -311,7 +333,10 @@ export interface GenerationProgress {
 
 export async function fetchHealth(): Promise<HealthReport> {
   // /health responde 503 quando degradado, mas o corpo continua sendo o relatório.
-  const response = await fetch(`${API_URL}/health`, { credentials: 'include', cache: 'no-store' });
+  const response = await fetch(`${apiUrl()}/health`, {
+    credentials: 'include',
+    cache: 'no-store',
+  });
   return (await response.json()) as HealthReport;
 }
 

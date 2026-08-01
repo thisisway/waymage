@@ -29,13 +29,13 @@ Tenha em mãos:
 memória. Com 4 GB passa com folga. Se o build do `web` morrer sem mensagem clara, é isso —
 adicione swap ou suba a máquina antes de procurar culpa no código.
 
-**A ordem importa e não é preciosismo.** `NEXT_PUBLIC_API_URL` é embutida no build do
-frontend, não lida em runtime: se o `web` for buildado antes de a API ter URL, a imagem sai
-apontando para `localhost` e a única correção é rebuildar.
-
 ```
 Postgres → Redis → R2 → api → (anotar URL) → web → APP_URL na api → worker
 ```
+
+A ordem ainda ajuda — é mais simples configurar o `web` já sabendo a URL da API —, mas não é
+mais irreversível: a URL da API é lida em runtime, então trocá-la é editar a variável e
+reiniciar, sem rebuild.
 
 **O que este deploy entrega.** Enquanto não houver adapter de provedor real, as imagens são
 gradientes determinísticos do `FakeImageProvider`. Fila, créditos, storage, SSE e moderação são
@@ -267,20 +267,18 @@ Anote a decisão; ela é aplicada no passo 8.
 | -------------------- | --------------------- |
 | Arquivo (Dockerfile) | `apps/web/Dockerfile` |
 
-**Cartão Ambiente** — a variável que a maioria esquece:
+**Cartão Ambiente:**
 
 ```
-NEXT_PUBLIC_API_URL=https://<URL pública da api>
+API_URL=https://<URL pública da api>
 ```
 
-Ela é **embutida no bundle durante o build**, não lida em runtime. O `apps/web/Dockerfile` já
-declara o `ARG` correspondente, e a documentação do EasyPanel diz que as variáveis de ambiente
-"são fornecidas ao build e ao container em execução" — então definir aqui basta.
+`API_URL`, sem o prefixo `NEXT_PUBLIC_`. O nome não é detalhe: o Next substitui
+`process.env.NEXT_PUBLIC_*` textualmente durante o build, e o EasyPanel só injeta variáveis no
+container em execução — a combinação faria o frontend sair apontando para `localhost`
+([D-068](DECISIONS.md#d-068)).
 
-**Como saber se funcionou:** depois do deploy, abra o app e olhe o console do browser. Se os
-requests forem para `localhost:3333`, o valor não chegou ao build. Nesse caso a saída é fazer o
-próprio Next servir de proxy para a API, com URL lida em runtime — o que também dispensaria o
-`COOKIE_SAMESITE` do passo 6.
+Trocar de API depois é editar esta variável e reiniciar. Sem rebuild.
 
 **Domains:** adicione um domínio, com a porta interna `3000`.
 

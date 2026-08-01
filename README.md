@@ -88,8 +88,9 @@ docker build -f apps/web/Dockerfile               -t waymage-web  \
 
 Pontos que mordem se passarem despercebidos:
 
-- **`NEXT_PUBLIC_API_URL` é embutida no build** do frontend, não lida em runtime. Trocar a
-  URL da API exige rebuild da imagem web.
+- **`API_URL` no serviço web**, sem o prefixo `NEXT_PUBLIC_`: a URL da API é lida em runtime
+  ([D-068](docs/DECISIONS.md#d-068)). `NEXT_PUBLIC_API_URL` continua servindo o
+  desenvolvimento local, onde ela nunca muda.
 - **Só a API aplica migrations**, no entrypoint (`prisma migrate deploy`). O worker sobe
   direto. Defina `RUN_MIGRATIONS=false` se preferir rodá-las como passo separado.
 - **`TRUST_PROXY=true`** atrás do proxy do EasyPanel, senão o rate limit enxerga todos os

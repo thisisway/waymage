@@ -1210,6 +1210,39 @@ dependencias em `ok`, worker registrando as tres filas e os dois provedores, e o
 
 ---
 
+## D-068 — A URL da API e lida em runtime, nao embutida no bundle
+
+**Status:** aceita (primeiro deploy) · substitui a decisao de build arg da Fase 2
+
+`NEXT_PUBLIC_*` e substituida textualmente durante o build do Next. O EasyPanel injeta
+variaveis no container em execucao, e nao passa variaveis de ambiente como build args no
+metodo Dockerfile. As duas coisas juntas produzem um frontend que sai apontando para
+`http://localhost:3333` — e o sintoma, no browser, e o Chrome pedindo permissao de acesso a
+rede local, porque uma pagina publica tentou falar com `localhost`.
+
+O layout raiz e Server Component: ele le `process.env.API_URL` a cada resposta e desce o valor
+numa tag `<script>`. O cliente consome por `apiUrl()`, uma funcao e nao uma constante de
+modulo — constante seria avaliada na carga do modulo, que pode acontecer antes do script.
+
+`API_URL` **sem** o prefixo, de proposito: com `NEXT_PUBLIC_` o Next substituiria tambem esta
+leitura e voltariamos ao valor de build. `NEXT_PUBLIC_API_URL` sobrevive como padrao de
+desenvolvimento local, onde a URL nunca muda.
+
+Junto veio `export const dynamic = 'force-dynamic'` no layout. Sem isso o Next pre-renderiza
+as paginas, o layout roda uma vez durante o build e o valor congela na imagem — foi
+exatamente o que aconteceu na primeira tentativa da correcao. O custo e baixo: toda tela deste
+app busca os dados no cliente, entao a versao estatica nunca continha conteudo real.
+
+**O que se ganha:** trocar de ambiente passa a ser editar uma variavel e reiniciar. Antes
+exigia rebuild da imagem — e, num painel que nao repassa build args, era impossivel.
+
+A alternativa considerada era o proprio Next servir de proxy para a API, o que tambem
+eliminaria CORS e a questao de `SameSite`. Ficou de fora por causa do SSE: o progresso ao vivo
+atravessaria mais um salto, com risco de buffering, e nao ha razao para arriscar o que ja
+funciona.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

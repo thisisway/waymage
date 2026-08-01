@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { API_URL, ApiError, api, queryKeys, type GenerationProgress } from './api';
+import { ApiError, api, apiUrl, queryKeys, type GenerationProgress } from './api';
 
 /**
  * Acompanha uma geração do clique até os resultados.
@@ -52,7 +52,7 @@ export function useGeneration(sceneId: string) {
 
     // `withCredentials` é o que faz o cookie de sessão acompanhar o SSE — sem ele o guard
     // da API responde 401 e o stream nunca abre.
-    const source = new EventSource(`${API_URL}/generation-jobs/${jobId}/events`, {
+    const source = new EventSource(`${apiUrl()}/generation-jobs/${jobId}/events`, {
       withCredentials: true,
     });
     sourceRef.current = source;
