@@ -188,8 +188,13 @@ S3_FORCE_PATH_STYLE=true
 `APP_URL` e `COOKIE_SAMESITE` estão provisórios de propósito. O passo 8 corrige os dois, quando
 as URLs reais existirem.
 
-**Domains:** adicione um domínio. Aceite o padrão do EasyPanel e **confirme que o HTTPS está
-ativo** — o resto depende disso.
+**Domínios:** adicione um domínio e **troque a porta para `3333`**.
+
+O painel preenche `3000` por padrão, que é a porta do Next e não a da API. Com a porta errada
+o domínio abre a tela _"Service is not reachable"_ do próprio EasyPanel, mesmo com o container
+rodando — é o proxy que não achou ninguém escutando, não a aplicação que caiu.
+
+Confirme também que o HTTPS está ativo; o resto depende disso.
 
 **Advanced → Health Check:**
 
@@ -222,16 +227,21 @@ subdomínios do mesmo site. Com `SameSite=Lax` o cookie de sessão não acompanh
 sintoma engana: o cadastro responde 200 e todo request seguinte volta 401
 ([D-066](DECISIONS.md#d-066)).
 
-| Formato das duas URLs                                            | `COOKIE_SAMESITE` |
-| ---------------------------------------------------------------- | ----------------- |
-| `waymage-api.easypanel.host` / `waymage-web.easypanel.host`      | `none`            |
-| `waymage-api.SERVIDOR.easypanel.host` / `waymage-web.SERVIDOR.…` | `lax`             |
-| Domínio próprio, mesma raiz (`api.` e `app.`)                    | `lax`             |
-| Domínios de raízes diferentes                                    | `none`            |
+| Formato das duas URLs                                                       | `COOKIE_SAMESITE` |
+| --------------------------------------------------------------------------- | ----------------- |
+| `<proj>-api.SERVIDOR.easypanel.host` / `<proj>-web.SERVIDOR.easypanel.host` | `lax`             |
+| `waymage-api.easypanel.host` / `waymage-web.easypanel.host`                 | `none`            |
+| Domínio próprio, mesma raiz (`api.` e `app.`)                               | `lax`             |
+| Domínios de raízes diferentes                                               | `none`            |
 
 A regra por trás da tabela: se as duas URLs **compartilham um rótulo antes de
 `easypanel.host`**, são o mesmo site e `lax` serve. Se cada uma tem o seu, são sites distintos
 e precisa de `none`.
+
+Na prática o EasyPanel gera domínios no formato `<projeto>-<serviço>.<servidor>.easypanel.host`
+— por exemplo `web-way-waymage-api.fzd763.easypanel.host` —, e o rótulo do servidor é comum aos
+dois. Nesse arranjo, que é o padrão, **`lax` basta**. A linha do `none` fica para instalações
+que expõem os serviços direto em `easypanel.host`, sem o rótulo do servidor no meio.
 
 `none` exige HTTPS nas duas pontas — por isso a confirmação do certificado no passo anterior.
 
@@ -362,19 +372,20 @@ pesado. Se o VPS for apertado, prefira deploy manual do `web`.
 
 ## Se der errado
 
-| Sintoma                                          | Causa provável                                                           |
-| ------------------------------------------------ | ------------------------------------------------------------------------ |
-| Cadastro dá 200, tudo depois dá 401              | `COOKIE_SAMESITE` errado para o formato das URLs (passo 6)               |
-| Erro de CORS no console do browser               | `APP_URL` da API não é exatamente a URL do web, com `https://`           |
-| Telas carregam vazias, requests para `localhost` | `NEXT_PUBLIC_API_URL` não chegou ao build do web — precisa rebuild       |
-| Campo de Dockerfile não aparece no cartão Fonte  | Ele fica no cartão **Compilação**, mais abaixo na mesma página           |
-| API reinicia sem parar                           | Health check apontando para rota que exige autenticação, ou porta errada |
-| API sobe e morre no boot                         | Variável obrigatória faltando — o log diz o nome dela                    |
-| `JWT_ACCESS_SECRET precisa de ao menos 32…`      | Segredo curto; gere de novo com `openssl rand -base64 48`                |
-| Build do web morre sem mensagem                  | Memória do VPS; adicione swap ou suba a máquina                          |
-| Geração fica em `QUEUED` para sempre             | Worker não subiu, ou está com `REDIS_URL` diferente da API               |
-| Imagem gerada não carrega na tela                | Credencial do R2 sem permissão de escrita, ou `S3_ENDPOINT` errado       |
-| Crédito preso em "reservado"                     | Worker caiu no meio do job; o log dele aponta o passo                    |
+| Sintoma                                           | Causa provável                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| Cadastro dá 200, tudo depois dá 401               | `COOKIE_SAMESITE` errado para o formato das URLs (passo 6)               |
+| Erro de CORS no console do browser                | `APP_URL` da API não é exatamente a URL do web, com `https://`           |
+| Telas carregam vazias, requests para `localhost`  | `NEXT_PUBLIC_API_URL` não chegou ao build do web — precisa rebuild       |
+| Campo de Dockerfile não aparece no cartão Fonte   | Ele fica no cartão **Compilação**, mais abaixo na mesma página           |
+| _"Service is not reachable"_ na tela do EasyPanel | Porta do domínio errada: a API é `3333`, o web é `3000`                  |
+| API reinicia sem parar                            | Health check apontando para rota que exige autenticação, ou porta errada |
+| API sobe e morre no boot                          | Variável obrigatória faltando — o log diz o nome dela                    |
+| `JWT_ACCESS_SECRET precisa de ao menos 32…`       | Segredo curto; gere de novo com `openssl rand -base64 48`                |
+| Build do web morre sem mensagem                   | Memória do VPS; adicione swap ou suba a máquina                          |
+| Geração fica em `QUEUED` para sempre              | Worker não subiu, ou está com `REDIS_URL` diferente da API               |
+| Imagem gerada não carrega na tela                 | Credencial do R2 sem permissão de escrita, ou `S3_ENDPOINT` errado       |
+| Crédito preso em "reservado"                      | Worker caiu no meio do job; o log dele aponta o passo                    |
 
 A API falha no boot, e não no primeiro request, exatamente para que esses casos apareçam no log
 do deploy em vez de virarem 500 intermitente às 3h da manhã.
