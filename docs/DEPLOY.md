@@ -65,6 +65,13 @@ qualquer um serve, desde que os cinco serviços fiquem no mesmo projeto.
 Tudo daqui em diante vive dentro dele. Serviços do mesmo projeto se enxergam por rede interna
 — é assim que a API fala com o banco sem expor Postgres à internet.
 
+Os nomes de serviço também são seus, e prefixá-los (`waymage-api`, `waymage-web`…) ajuda quando
+o mesmo painel hospeda vários projetos. A única consequência é que o **hostname interno** vira
+`<projeto>_<serviço>`, e é ele que entra em `DATABASE_URL` e `REDIS_URL`.
+
+Ao final devem existir cinco serviços — Postgres, Redis, `api`, `web` e `worker`. Se sobrar
+algum, ele não é do guia.
+
 ---
 
 ## Passo 2 — Postgres
@@ -78,10 +85,14 @@ Tudo daqui em diante vive dentro dele. Serviços do mesmo projeto se enxergam po
 | Usuário | `waymage`  |
 | Senha   | gere uma   |
 
-Depois de criar, abra o serviço e copie a **URL de conexão interna** que o EasyPanel exibe
-(algo como `postgres://waymage:senha@waymage_postgres:5432/waymage`). Use exatamente a string
-que a tela mostrar — o formato do host varia com a versão, e chutar aqui custa uma rodada de
-deploy.
+Depois de criar, abra o serviço e copie a **URL de conexão interna** que o EasyPanel exibe.
+
+O hostname interno é `<projeto>_<serviço>`, então ele carrega os nomes que você escolheu: num
+projeto `web-way` com o serviço `waymage-postgres`, a URL sai como
+`postgres://waymage:senha@web-way_waymage-postgres:5432/waymage`.
+
+Prefixar os serviços para organizar é livre — só não digite a URL de cabeça. Copie a string que
+a tela mostrar: o formato varia com a versão, e chutar aqui custa uma rodada de deploy.
 
 **Não publique porta.** O banco só precisa ser alcançável de dentro do projeto.
 
@@ -95,8 +106,8 @@ usuário real, não depois do primeiro susto.
 
 ## Passo 3 — Redis
 
-**+ Serviço → Redis.** Nome: `redis`. Copie a URL interna do mesmo jeito
-(`redis://waymage_redis:6379`).
+**+ Serviço → Redis.** Nome: `redis`. Copie a URL interna do mesmo jeito — com a mesma regra
+de hostname, ela sai como `redis://<projeto>_<serviço>:6379`.
 
 Redis aqui é fila (BullMQ) e canal de eventos do progresso ao vivo, não cache descartável —
 mas nada nele é fonte da verdade: o estado dos jobs está no Postgres.
