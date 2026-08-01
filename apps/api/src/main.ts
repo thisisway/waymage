@@ -7,6 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import type { FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from './app.module';
+import { corsOptions } from './common/cors';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { registerRateLimit } from './common/rate-limit';
 import { env } from './config/env';
@@ -36,9 +37,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new HttpExceptionFilter());
   registerRateLimit(app.getHttpAdapter().getInstance(), app.get(RedisService).client);
 
-  // Sessão por cookie exige origem explícita: `origin: true` com credenciais aceitaria
-  // qualquer site e anularia a proteção do SameSite.
-  app.enableCors({ origin: env.APP_URL, credentials: true });
+  app.enableCors(corsOptions(env.APP_URL));
   app.enableShutdownHooks();
 
   await app.listen(env.API_PORT, '0.0.0.0');

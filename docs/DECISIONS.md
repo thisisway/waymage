@@ -1243,6 +1243,31 @@ funciona.
 
 ---
 
+## D-069 — CORS declara os metodos, e o preflight virou teste
+
+**Status:** aceita (primeiro deploy)
+
+O padrao do `@fastify/cors` e `methods: 'GET,HEAD,POST'` — os metodos "simples" do CORS.
+`app.enableCors({ origin, credentials })` sem `methods` herdava esse padrao, e o preflight de
+`PATCH` e `DELETE` voltava negado. No browser isso derruba o autosave da cena e a exclusao de
+referencia; fora dele, nada.
+
+**Por que nenhum teste pegou.** As suites usam `app.inject()`, e chamar `PATCH` direto nao
+dispara preflight — o browser e que faz a requisicao `OPTIONS` antes. Toda a bateria passava
+verde sobre um caminho que o navegador recusava. O defeito so apareceu quando a aplicacao foi
+aberta num browser contra a API implantada.
+
+A configuracao saiu do `main.ts` para `common/cors.ts` justamente para poder ser exercitada:
+reproduzir os valores dentro do teste garantiria apenas que a copia esta certa. O teste agora
+manda um `OPTIONS` de verdade e verifica os quatro metodos que a aplicacao usa, o eco da
+origem configurada e a recusa de origem alheia — e foi confirmado que ele falha quando a
+correcao e removida.
+
+Cabecalhos continuam sem `allowedHeaders`: o plugin reflete os que o preflight pediu, o que
+cobre `content-type`, `x-csrf-token` e `idempotency-key` sem manter a lista em dois lugares.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

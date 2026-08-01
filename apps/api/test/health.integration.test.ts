@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { corsOptions } from '../src/common/cors';
 
 /**
  * Health precisa responder SEM sessão.
@@ -12,10 +13,13 @@ import { AppModule } from '../src/app.module';
  */
 let app: NestFastifyApplication;
 
+const WEB_ORIGIN = 'https://app.exemplo.test';
+
 beforeAll(async () => {
   app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
     logger: false,
   });
+  app.enableCors(corsOptions(WEB_ORIGIN));
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 }, 60_000);
@@ -48,5 +52,47 @@ describe('health checks', () => {
     for (const leak of ['postgresql://', 'minioadmin', 'password', 'waymage:waymage']) {
       expect(body).not.toContain(leak);
     }
+  });
+});
+
+/**
+ * Preflight.
+ *
+ * Este bloco existe porque a regressão já aconteceu, e nenhum outro teste podia pegá-la:
+ * `app.inject()` chamando `PATCH` direto nunca dispara preflight, então o autosave passava
+ * verde aqui e falhava no browser. O que se testa aqui é o preflight em si.
+ */
+describe('CORS', () => {
+  async function preflight(method: string, origin = WEB_ORIGIN) {
+    return app.inject({
+      method: 'OPTIONS',
+      url: '/scenes/00000000-0000-0000-0000-000000000000',
+      headers: { origin, 'access-control-request-method': method },
+    });
+  }
+
+  it('permite os métodos que a aplicação usa', async () => {
+    // `PATCH` é o autosave da cena e `DELETE` é a exclusão de referência. O padrão do
+    // @fastify/cors — `GET,HEAD,POST` — deixaria os dois de fora.
+    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+      const allowed = (await preflight(method)).headers['access-control-allow-methods'];
+      expect(String(allowed), method).toContain(method);
+    }
+  });
+
+  it('responde só à origem configurada, com credenciais', async () => {
+    const response = await preflight('POST');
+
+    expect(response.headers['access-control-allow-origin']).toBe(WEB_ORIGIN);
+    // Sem isto o browser descarta o cookie de sessão na resposta.
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+  });
+
+  it('não autoriza origem desconhecida', async () => {
+    const response = await preflight('POST', 'https://site-qualquer.test');
+
+    // Origem alheia não pode receber eco: com credenciais, isso entregaria a sessão do
+    // usuário a qualquer página que ele visitasse.
+    expect(response.headers['access-control-allow-origin']).not.toBe('https://site-qualquer.test');
   });
 });
