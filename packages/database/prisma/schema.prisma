@@ -133,23 +133,24 @@ enum ExportStatus {
 // ─── Identidade e tenancy ────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  name         String
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  name          String
   /// argon2id. Nunca logar, nunca serializar em resposta.
-  passwordHash String
-  emailVerified Boolean @default(false)
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
-  memberships     WorkspaceMember[]
-  refreshTokens   RefreshToken[]
-  sceneVersions   SceneVersion[]
-  generationJobs  GenerationJob[]
-  auditLogs       AuditLog[]
-  uploadedAssets  Asset[]
-  consentRecords  ConsentRecord[]
-  exportJobs      ExportJob[]
+  memberships         WorkspaceMember[]
+  refreshTokens       RefreshToken[]
+  sceneVersions       SceneVersion[]
+  generationJobs      GenerationJob[]
+  auditLogs           AuditLog[]
+  uploadedAssets      Asset[]
+  consentRecords      ConsentRecord[]
+  exportJobs          ExportJob[]
+  providerCredentials ProviderCredential[]
 
   @@map("users")
 }
@@ -161,16 +162,16 @@ model User {
 /// reaparecer, significa que alguém copiou o cookie: a família inteira é revogada, o que
 /// desloga tanto o atacante quanto o dono — o certo, porque não há como distinguir os dois.
 model RefreshToken {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @db.Uuid
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
   /// SHA-256 do token. Nunca o token em si.
-  tokenHash     String    @unique
-  family        String    @db.Uuid
-  expiresAt     DateTime  @db.Timestamptz(6)
+  tokenHash  String    @unique
+  family     String    @db.Uuid
+  expiresAt  DateTime  @db.Timestamptz(6)
   /// Marcado ao ser trocado por outro. Reuso de token consumido dispara a revogação.
-  consumedAt    DateTime? @db.Timestamptz(6)
-  revokedAt     DateTime? @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  revokedAt  DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -188,16 +189,17 @@ model Workspace {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  members        WorkspaceMember[]
-  projects       Project[]
-  assets         Asset[]
-  generationJobs GenerationJob[]
-  brandKits      BrandKit[]
-  wallet         CreditWallet?
-  usageLedger    UsageLedger[]
-  auditLogs      AuditLog[]
-  consentRecords ConsentRecord[]
-  exportJobs     ExportJob[]
+  members             WorkspaceMember[]
+  projects            Project[]
+  assets              Asset[]
+  generationJobs      GenerationJob[]
+  brandKits           BrandKit[]
+  wallet              CreditWallet?
+  usageLedger         UsageLedger[]
+  auditLogs           AuditLog[]
+  consentRecords      ConsentRecord[]
+  exportJobs          ExportJob[]
+  providerCredentials ProviderCredential[]
 
   @@map("workspaces")
 }
@@ -260,9 +262,9 @@ model Scene {
   updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt        DateTime? @db.Timestamptz(6)
 
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  versions       SceneVersion[] @relation("SceneVersions")
-  currentVersion SceneVersion?  @relation("SceneCurrentVersion", fields: [currentVersionId], references: [id])
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions       SceneVersion[]  @relation("SceneVersions")
+  currentVersion SceneVersion?   @relation("SceneCurrentVersion", fields: [currentVersionId], references: [id])
   generationJobs GenerationJob[]
 
   @@index([workspaceId, projectId, deletedAt])
@@ -322,16 +324,16 @@ model Asset {
   updatedAt    DateTime    @updatedAt @db.Timestamptz(6)
   deletedAt    DateTime?   @db.Timestamptz(6)
 
-  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  bindings          ReferenceBinding[]
-  resultsAsImage    GenerationResult[] @relation("ResultImage")
-  resultsAsThumb    GenerationResult[] @relation("ResultThumbnail")
-  masks             MaskAsset[]
-  editOperations    EditOperation[]
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy          User?                @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  bindings            ReferenceBinding[]
+  resultsAsImage      GenerationResult[]   @relation("ResultImage")
+  resultsAsThumb      GenerationResult[]   @relation("ResultThumbnail")
+  masks               MaskAsset[]
+  editOperations      EditOperation[]
   moderationDecisions ModerationDecision[]
-  consentRecords    ConsentRecord[]
+  consentRecords      ConsentRecord[]
 
   @@index([workspaceId, kind, status])
   @@index([projectId, deletedAt])
@@ -379,44 +381,44 @@ model MaskAsset {
 // ─── Geração ─────────────────────────────────────────────────────────────────
 
 model GenerationJob {
-  id             String           @id @default(uuid()) @db.Uuid
-  workspaceId    String           @db.Uuid
-  projectId      String           @db.Uuid
-  sceneId        String           @db.Uuid
-  sceneVersionId String           @db.Uuid
-  status         GenerationStatus @default(DRAFT)
-  operationType  OperationType    @default(TEXT_TO_IMAGE)
-  requestedCount Int              @default(4)
+  id               String           @id @default(uuid()) @db.Uuid
+  workspaceId      String           @db.Uuid
+  projectId        String           @db.Uuid
+  sceneId          String           @db.Uuid
+  sceneVersionId   String           @db.Uuid
+  status           GenerationStatus @default(DRAFT)
+  operationType    OperationType    @default(TEXT_TO_IMAGE)
+  requestedCount   Int              @default(4)
   /// "auto" delega ao ModelRouter; qualquer outro valor força um provedor.
-  providerStrategy String         @default("auto")
+  providerStrategy String           @default("auto")
   selectedProvider String?
-  estimatedCredits Int            @default(0)
-  reservedCredits  Int            @default(0)
+  estimatedCredits Int              @default(0)
+  reservedCredits  Int              @default(0)
   actualCredits    Int?
   /// Escopada ao workspace: a mesma chave nunca executa duas vezes.
-  idempotencyKey String
-  errorCode      String?
-  errorMessage   String?
+  idempotencyKey   String
+  errorCode        String?
+  errorMessage     String?
   /// Resultado que originou esta geração, em variação e refinamento.
   /// É o que permite reconstruir a linhagem: rascunho A → variação A2 → refino final.
-  sourceResultId String?          @db.Uuid
-  createdById    String?          @db.Uuid
-  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
-  startedAt      DateTime?        @db.Timestamptz(6)
-  completedAt    DateTime?        @db.Timestamptz(6)
+  sourceResultId   String?          @db.Uuid
+  createdById      String?          @db.Uuid
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  startedAt        DateTime?        @db.Timestamptz(6)
+  completedAt      DateTime?        @db.Timestamptz(6)
 
-  workspace    Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  scene        Scene                @relation(fields: [sceneId], references: [id], onDelete: Cascade)
-  sceneVersion SceneVersion         @relation(fields: [sceneVersionId], references: [id])
-  sourceResult GenerationResult?    @relation("DerivedJobs", fields: [sourceResultId], references: [id], onDelete: SetNull)
-  createdBy    User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  results      GenerationResult[]
-  providerRuns ProviderRun[]
-  compilations PromptCompilation[]
-  usage        UsageLedger[]
-  transactions CreditTransaction[]
-  moderation   ModerationDecision[]
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scene         Scene                @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  sceneVersion  SceneVersion         @relation(fields: [sceneVersionId], references: [id])
+  sourceResult  GenerationResult?    @relation("DerivedJobs", fields: [sourceResultId], references: [id], onDelete: SetNull)
+  createdBy     User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  results       GenerationResult[]
+  providerRuns  ProviderRun[]
+  compilations  PromptCompilation[]
+  usage         UsageLedger[]
+  transactions  CreditTransaction[]
+  moderation    ModerationDecision[]
   editOperation EditOperation?
 
   @@unique([workspaceId, idempotencyKey])
@@ -426,21 +428,21 @@ model GenerationJob {
 }
 
 model GenerationResult {
-  id                String            @id @default(uuid()) @db.Uuid
-  workspaceId       String            @db.Uuid
-  generationJobId   String            @db.Uuid
-  providerRunId     String?           @db.Uuid
-  assetId           String            @db.Uuid
-  thumbnailAssetId  String?           @db.Uuid
-  width             Int
-  height            Int
-  format            String
-  seed              BigInt?
-  safetyStatus      ModerationVerdict @default(ALLOW)
+  id               String            @id @default(uuid()) @db.Uuid
+  workspaceId      String            @db.Uuid
+  generationJobId  String            @db.Uuid
+  providerRunId    String?           @db.Uuid
+  assetId          String            @db.Uuid
+  thumbnailAssetId String?           @db.Uuid
+  width            Int
+  height           Int
+  format           String
+  seed             BigInt?
+  safetyStatus     ModerationVerdict @default(ALLOW)
   /// Avaliação automática de aderência (blueprint §18).
-  evaluation        Json?
-  selected          Boolean           @default(false)
-  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+  evaluation       Json?
+  selected         Boolean           @default(false)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
 
   job            GenerationJob   @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
   providerRun    ProviderRun?    @relation(fields: [providerRunId], references: [id], onDelete: SetNull)
@@ -484,18 +486,18 @@ model ProviderRun {
 
 /// Nunca guardar só o prompt: aqui ficam SceneSpec normalizado, prompt e versão do compilador.
 model PromptCompilation {
-  id              String   @id @default(uuid()) @db.Uuid
-  workspaceId     String   @db.Uuid
-  generationJobId String   @db.Uuid
-  provider        String
-  mode            String
-  prompt          String
-  negativePrompt  String?
-  referenceInstructions Json @default("[]")
-  warnings        Json     @default("[]")
-  normalizedSpec  Json
-  compilerVersion String
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  id                    String   @id @default(uuid()) @db.Uuid
+  workspaceId           String   @db.Uuid
+  generationJobId       String   @db.Uuid
+  provider              String
+  mode                  String
+  prompt                String
+  negativePrompt        String?
+  referenceInstructions Json     @default("[]")
+  warnings              Json     @default("[]")
+  normalizedSpec        Json
+  compilerVersion       String
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
 
   job GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
 
@@ -504,16 +506,16 @@ model PromptCompilation {
 }
 
 model EditOperation {
-  id             String   @id @default(uuid()) @db.Uuid
-  workspaceId    String   @db.Uuid
-  sourceResultId String   @db.Uuid
-  maskId         String?  @db.Uuid
-  resultAssetId  String?  @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @db.Uuid
+  sourceResultId  String   @db.Uuid
+  maskId          String?  @db.Uuid
+  resultAssetId   String?  @db.Uuid
   /// Job que executa esta edicao. Unico: um job corresponde a uma operacao de edicao.
   /// E por aqui que o worker recupera instrucao e mascara a partir do job da fila.
-  generationJobId String? @unique @db.Uuid
-  instruction    String
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  generationJobId String?  @unique @db.Uuid
+  instruction     String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
   sourceResult  GenerationResult @relation(fields: [sourceResultId], references: [id], onDelete: Cascade)
   mask          MaskAsset?       @relation(fields: [maskId], references: [id], onDelete: SetNull)
@@ -522,6 +524,33 @@ model EditOperation {
 
   @@index([workspaceId, sourceResultId])
   @@map("edit_operations")
+}
+
+/// Chave de API de provedor, trazida pelo proprio usuario (BYOK).
+///
+/// O valor NUNCA e guardado em claro: `secretSealed` e AES-256-GCM, aberto so no processo
+/// que vai chamar o fornecedor. `secretHint` sao os quatro ultimos caracteres, o bastante
+/// para a pessoa reconhecer qual chave e sem que a linha ajude quem a roubasse.
+model ProviderCredential {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @db.Uuid
+  /// Id do provedor no registro (`ImageProvider.id`).
+  provider     String
+  secretSealed String
+  secretHint   String
+  createdById  String?   @db.Uuid
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  /// Ultima vez que a chave foi usada numa geracao. Ajuda a identificar chave esquecida.
+  lastUsedAt   DateTime? @db.Timestamptz(6)
+  /// Revogacao e marcacao, nao exclusao: o historico de quem cadastrou o que sobrevive.
+  revokedAt    DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Uma chave ativa por provedor. Parcial, para que revogadas nao ocupem o lugar.
+  @@index([workspaceId, provider])
+  @@map("provider_credentials")
 }
 
 // ─── Brand kit ───────────────────────────────────────────────────────────────
@@ -586,15 +615,15 @@ model CreditTransaction {
 
 /// Custo interno vs. custo real do provedor, por job. Base das métricas de margem.
 model UsageLedger {
-  id              String   @id @default(uuid()) @db.Uuid
-  workspaceId     String   @db.Uuid
-  generationJobId String   @db.Uuid
-  provider        String
-  imagesProduced  Int      @default(0)
-  creditsCharged  Int      @default(0)
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @db.Uuid
+  generationJobId   String   @db.Uuid
+  provider          String
+  imagesProduced    Int      @default(0)
+  creditsCharged    Int      @default(0)
   /// Centavos de USD.
-  externalCostCents Int    @default(0)
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  externalCostCents Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
 
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   job       GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
@@ -626,14 +655,14 @@ model ModerationDecision {
 
 /// Autorização de uso de imagem de pessoa real. Revogável (blueprint §17.2).
 model ConsentRecord {
-  id          String    @id @default(uuid()) @db.Uuid
-  workspaceId String    @db.Uuid
-  assetId     String    @db.Uuid
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @db.Uuid
+  assetId      String    @db.Uuid
   /// Quem declarou possuir a autorização.
-  declaredById String   @db.Uuid
+  declaredById String    @db.Uuid
   subjectLabel String?
-  grantedAt   DateTime  @default(now()) @db.Timestamptz(6)
-  revokedAt   DateTime? @db.Timestamptz(6)
+  grantedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt    DateTime? @db.Timestamptz(6)
 
   workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
