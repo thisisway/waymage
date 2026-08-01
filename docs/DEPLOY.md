@@ -136,6 +136,37 @@ S3_FORCE_PATH_STYLE=true
 O bucket fica **privado**. O app entrega as imagens por URL assinada de expiração curta; um
 bucket público tornaria toda imagem de todo cliente acessível a quem descobrisse a URL.
 
+### CORS do bucket — obrigatório
+
+O upload de referência vai do **browser direto ao R2**, sem passar pela API (é o que evita que
+um arquivo de 15 MB ocupe memória do processo que atende todo mundo). Isso torna o envio uma
+requisição cross-origin, e bucket R2 nasce **sem** política de CORS: o navegador bloqueia o
+`PUT` antes mesmo de mandar.
+
+Em **R2 → seu bucket → Settings → CORS Policy**, cole — trocando pelo domínio real do seu web:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<URL pública do web>"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+`AllowedHeaders` precisa conter `content-type` porque o `PUT` o envia, e ele faz parte da
+assinatura — sem isso a requisição é recusada ainda no preflight.
+
+Só o domínio do web, nunca `*`: a URL assinada é a autorização, e liberar qualquer origem
+deixaria uma URL vazada ser usada de qualquer página.
+
+Sintoma de CORS faltando: _"O navegador bloqueou o envio ao storage"_ ao anexar referência. Se
+a mensagem for _"O storage recusou o arquivo"_, o CORS está certo e o problema é outro —
+permissão do token ou `S3_ENDPOINT` errado.
+
 ---
 
 ## Passo 5 — Serviço `api`

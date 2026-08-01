@@ -501,15 +501,37 @@ export async function uploadAsset(
 
   // Sem `credentials`: a URL assinada já carrega a autorização, e mandar cookie para o
   // storage seria vazar a sessão para um host que não precisa dela.
+  /**
+   * Duas falhas muito diferentes moram aqui, e confundi-las custa uma tarde.
+   *
+   * O `fetch` REJEITAR significa que o browser nem chegou a mandar: quase sempre o bucket sem
+   * política de CORS, já que o arquivo vai daqui direto ao storage. Uma resposta com status
+   * de erro significa que o storage recebeu e recusou — assinatura expirada, tipo divergente
+   * do assinado, permissão faltando.
+   *
+   * A mensagem precisa dizer qual das duas foi, senão o único caminho é adivinhar.
+   */
   const upload = await fetch(ticket.uploadUrl, {
     method: 'PUT',
     body: file,
     // Precisa bater exatamente com o tipo assinado, senão o storage recusa a assinatura.
     headers: { 'content-type': ticket.contentType },
-  });
+  }).catch(() => null);
+
+  if (!upload) {
+    throw new ApiError(
+      'UPLOAD_BLOCKED',
+      'O navegador bloqueou o envio ao storage. Falta liberar CORS no bucket para este domínio.',
+      0,
+    );
+  }
 
   if (!upload.ok) {
-    throw new ApiError('UPLOAD_FAILED', 'Falha ao enviar o arquivo.', upload.status);
+    throw new ApiError(
+      'UPLOAD_REJECTED',
+      `O storage recusou o arquivo (HTTP ${upload.status}).`,
+      upload.status,
+    );
   }
 
   return apiFetch<Asset>('/assets/complete', {

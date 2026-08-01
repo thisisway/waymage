@@ -57,7 +57,9 @@ export function LibraryPanel({
       return queryClient.invalidateQueries({ queryKey: queryKeys.assets(projectId) });
     },
     onError: (caught) =>
-      setError(caught instanceof ApiError ? caught.message : 'Falha ao enviar o arquivo.'),
+      setError(
+        caught instanceof ApiError ? caught.message : 'Falha inesperada ao enviar o arquivo.',
+      ),
   });
 
   const remove = useMutation({
