@@ -94,6 +94,32 @@ function csrfToken(): string {
 }
 
 /**
+ * Busca o token quando a memória está vazia.
+ *
+ * Acontece a cada recarregamento de página: a memória do módulo nasce vazia e o cookie não é
+ * legível quando a API vive noutro subdomínio. Sem isto, a primeira mutação depois de um F5
+ * falha com 403 — e só ela, o que torna o defeito difícil de reproduzir.
+ *
+ * `/auth/me` é GET, então não exige token e não cai em recursão. As chamadas simultâneas
+ * compartilham a mesma promessa: abrir a página e disparar três mutações não deve virar três
+ * idas ao servidor pelo mesmo valor.
+ */
+let pendingCsrf: Promise<void> | null = null;
+
+async function ensureCsrf(): Promise<void> {
+  if (csrfToken()) return;
+
+  pendingCsrf ??= apiFetch<Session>('/auth/me')
+    .then((session) => rememberCsrf(session.csrfToken))
+    .catch(() => undefined)
+    .finally(() => {
+      pendingCsrf = null;
+    });
+
+  await pendingCsrf;
+}
+
+/**
  * Cliente HTTP da API.
  *
  * `credentials: 'include'` em toda chamada: a sessão vive em cookie, não em header
@@ -106,13 +132,19 @@ export async function apiFetch<T>(
     body?: unknown;
     signal?: AbortSignal;
     headers?: Record<string, string>;
+    /** Uso interno: impede que a repetição por CSRF inválido vire laço. */
+    retried?: boolean;
   } = {},
 ): Promise<T> {
   const method = options.method ?? 'GET';
+  const mutation = method !== 'GET' && method !== 'HEAD';
+
+  if (mutation) await ensureCsrf();
+
   const headers: Record<string, string> = { ...options.headers };
 
   if (options.body !== undefined) headers['content-type'] = 'application/json';
-  if (method !== 'GET' && method !== 'HEAD') headers[CSRF_HEADER] = csrfToken();
+  if (mutation) headers[CSRF_HEADER] = csrfToken();
 
   const response = await fetch(`${apiUrl()}${path}`, {
     method,
@@ -129,6 +161,20 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const error = payload as ApiErrorBody | null;
+
+    /**
+     * Token recusado: busca outro e tenta uma vez.
+     *
+     * O token acompanha a sessão, e a sessão se renova sozinha — depois de um refresh o valor
+     * em memória fica velho. Repetir uma vez transforma isso num detalhe invisível, em vez de
+     * um erro que o usuário resolve recarregando a página.
+     */
+    if (error?.code === 'CSRF_TOKEN_INVALID' && !options.retried) {
+      csrfMemo = '';
+      await ensureCsrf();
+      return apiFetch<T>(path, { ...options, retried: true });
+    }
+
     throw new ApiError(
       error?.code ?? 'UNKNOWN_ERROR',
       error?.message ?? 'Não foi possível completar a operação.',

@@ -1356,6 +1356,18 @@ A alternativa era `Domain=.<servidor>.easypanel.host` no cookie. Recusada: espal
 por todos os subdominios irmaos do servidor, incluindo aplicacoes de terceiros hospedadas ao
 lado.
 
+**Correcao seguinte, no mesmo defeito.** Guardar em memoria resolveu o caso de quem acabou de
+entrar, e deixou de fora quem recarregou a pagina: a memoria do modulo nasce vazia, e so as
+telas que consultavam a sessao repunham o valor. O sintoma era pior que o original — a primeira
+mutacao depois de um F5 falhava, e so ela.
+
+O cliente passa a buscar o token quando a memoria esta vazia, antes de qualquer mutacao, e a
+repetir uma vez quando o servidor o recusa. A busca e compartilhada entre chamadas simultaneas:
+abrir a pagina e disparar tres mutacoes nao vira tres idas ao servidor pelo mesmo valor.
+
+A licao vale alem deste caso: **estado em memoria precisa ser recuperavel de qualquer tela**,
+nao so daquelas que por acaso o preenchem.
+
 ---
 
 ## D-073 — Mutacao que falha precisa dizer que falhou
