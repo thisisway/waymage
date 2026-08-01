@@ -17,8 +17,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/worker-generation/package.json apps/worker-generation/
+COPY packages/billing/package.json packages/billing/
 COPY packages/database/package.json packages/database/
 COPY packages/domain/package.json packages/domain/
+COPY packages/prompt-compiler/package.json packages/prompt-compiler/
 COPY packages/provider-sdk/package.json packages/provider-sdk/
 COPY packages/scene-spec/package.json packages/scene-spec/
 COPY packages/storage/package.json packages/storage/
@@ -36,21 +38,24 @@ ENV NODE_ENV=production
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/api/package.json apps/api/
-COPY --from=build /app/packages/database/package.json packages/database/
-COPY --from=build /app/packages/domain/package.json packages/domain/
-COPY --from=build /app/packages/provider-sdk/package.json packages/provider-sdk/
-COPY --from=build /app/packages/scene-spec/package.json packages/scene-spec/
-COPY --from=build /app/packages/storage/package.json packages/storage/
+
+# A árvore inteira de packages, e não um COPY por pacote.
+#
+# A lista escrita à mão já falhou: `@waymage/billing` e `@waymage/prompt-compiler` nasceram
+# depois deste Dockerfile, ninguém os acrescentou, e o build continuou verde — o erro só
+# apareceu quando o container subiu em produção e não achou o módulo.
+#
+# Copiando a árvore, um pacote novo entra sozinho. O que sobra é `src/` e alguns arquivos de
+# configuração, que são texto e não pesam perto do cliente do Prisma que já vinha junto.
+COPY --from=build /app/packages packages
+
+# Depois dos packages: o install precisa enxergar todo package.json do workspace para montar
+# os links entre eles.
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=build /app/apps/api/dist apps/api/dist
-COPY --from=build /app/packages/domain/dist packages/domain/dist
-COPY --from=build /app/packages/provider-sdk/dist packages/provider-sdk/dist
-COPY --from=build /app/packages/scene-spec/dist packages/scene-spec/dist
-COPY --from=build /app/packages/storage/dist packages/storage/dist
-COPY --from=build /app/packages/database/generated packages/database/generated
-# O schema e as migrations vão junto: o entrypoint aplica migrations antes de subir.
-COPY --from=build /app/packages/database/prisma packages/database/prisma
+# O CLI do Prisma vem inteiro porque o entrypoint aplica migrations antes de subir; o schema
+# e as migrations já chegaram junto com `packages/`.
 COPY --from=build /app/node_modules/prisma node_modules/prisma
 COPY --from=build /app/node_modules/.bin/prisma node_modules/.bin/prisma
 

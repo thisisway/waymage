@@ -1180,6 +1180,36 @@ serve. E a URL real que decide, nao a suposicao.
 
 ---
 
+## D-067 — Imagem de container so vale depois de ter subido
+
+**Status:** aceita (primeiro deploy)
+
+Os tres Dockerfiles buildavam verde e nenhum dos tres containers subia. Dois bugs distintos,
+mesma causa: build bem-sucedido foi tratado como prova de que a imagem funciona, e ela nao e.
+
+**API e worker.** A lista de `COPY` por pacote foi escrita na Fase 2. `@waymage/billing` e
+`@waymage/prompt-compiler` nasceram nas Fases 5 e 6, ninguem os acrescentou, e nada reclamou —
+o build continuou passando porque o TypeScript resolve pelos `paths` do tsconfig. O erro so
+apareceu no boot em producao: `Cannot find module '@waymage/billing'`.
+
+A correcao nao foi acrescentar as duas linhas. Foi parar de enumerar: o estagio de runtime
+copia `packages/` inteiro, entao um pacote novo entra sozinho. Enumerar continua no estagio de
+dependencias, onde serve ao cache e onde uma falta custa cache, nao correcao.
+
+O `web` e a excecao deliberada: depende de UM pacote do workspace, e copiar a arvore toda
+traria o cliente do Prisma para dentro da imagem do frontend sem nenhum uso.
+
+**Web.** O `CMD` apontava para `../../node_modules/next`, que e o layout do npm. pnpm nao
+achata dependencias na raiz — `next` vive em `apps/web/node_modules`, ligado ao store virtual.
+Mesma classe: build verde, container morto com `MODULE_NOT_FOUND`.
+
+**O que passa a valer:** mexeu em Dockerfile, roda o container. Os tres foram verificados
+subindo contra Postgres, Redis e MinIO reais — API respondendo `/health` com as tres
+dependencias em `ok`, worker registrando as tres filas e os dois provedores, e o web servindo
+`/login` com 200 e a URL da API embutida no bundle.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

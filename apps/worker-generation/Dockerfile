@@ -12,8 +12,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/worker-generation/package.json apps/worker-generation/
+COPY packages/billing/package.json packages/billing/
 COPY packages/database/package.json packages/database/
 COPY packages/domain/package.json packages/domain/
+COPY packages/prompt-compiler/package.json packages/prompt-compiler/
 COPY packages/provider-sdk/package.json packages/provider-sdk/
 COPY packages/scene-spec/package.json packages/scene-spec/
 COPY packages/storage/package.json packages/storage/
@@ -30,19 +32,14 @@ RUN apk add --no-cache vips-cpp
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/worker-generation/package.json apps/worker-generation/
-COPY --from=build /app/packages/database/package.json packages/database/
-COPY --from=build /app/packages/domain/package.json packages/domain/
-COPY --from=build /app/packages/provider-sdk/package.json packages/provider-sdk/
-COPY --from=build /app/packages/scene-spec/package.json packages/scene-spec/
-COPY --from=build /app/packages/storage/package.json packages/storage/
+
+# A árvore inteira de packages, pelo mesmo motivo da API: enumerar um COPY por pacote deixa
+# um pacote novo de fora sem quebrar o build, e o erro só aparece no boot em produção.
+COPY --from=build /app/packages packages
+
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=build /app/apps/worker-generation/dist apps/worker-generation/dist
-COPY --from=build /app/packages/domain/dist packages/domain/dist
-COPY --from=build /app/packages/provider-sdk/dist packages/provider-sdk/dist
-COPY --from=build /app/packages/scene-spec/dist packages/scene-spec/dist
-COPY --from=build /app/packages/storage/dist packages/storage/dist
-COPY --from=build /app/packages/database/generated packages/database/generated
 
 USER node
 
