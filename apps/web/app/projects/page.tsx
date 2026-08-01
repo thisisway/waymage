@@ -33,8 +33,14 @@ export default function ProjectsPage() {
 
   const createProject = useMutation({
     mutationFn: (name: string) => api.createProject({ name }),
-    onSuccess: () => {
+    onSuccess: (project) => {
       setCreating(false);
+      // Direto para o editor: o projeto já nasce com a primeira cena, e parar numa lista de
+      // um item só para clicar nele seria o passo que acabou de ser removido, de volta.
+      if (project.firstSceneId) {
+        router.push(`/scenes/${project.firstSceneId}`);
+        return;
+      }
       toast.success('Projeto criado');
       return queryClient.invalidateQueries({ queryKey: queryKeys.projects });
     },

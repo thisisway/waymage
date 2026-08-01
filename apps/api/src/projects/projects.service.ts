@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { AssetKind, AssetStatus } from '@waymage/database';
+import { AssetKind, AssetStatus, type Prisma } from '@waymage/database';
 import { AppError } from '../common/app-error';
+import { createEmptySceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../infra/prisma.service';
 import { AppStorageService } from '../infra/storage.service';
@@ -8,6 +9,8 @@ import type { CreateProjectInput, UpdateProjectInput } from './projects.schemas'
 import type { RequestPrincipal } from '../auth/request-user';
 
 export interface ProjectView {
+  /** Só na criação: a cena que nasceu junto, para a tela ir direto ao editor. */
+  firstSceneId?: string;
   id: string;
   name: string;
   description: string | null;
@@ -111,13 +114,41 @@ export class ProjectsService {
     input: CreateProjectInput,
     requestId?: string,
   ): Promise<ProjectView> {
-    const project = await this.prisma.project.create({
-      data: {
-        workspaceId: principal.workspaceId,
-        name: input.name,
-        description: input.description ?? null,
-      },
-      select: projectSelect,
+    /**
+     * O projeto nasce com a primeira cena.
+     *
+     * Sem isto, criar um projeto levava a uma lista vazia com outro formulário de nome — dois
+     * batismos antes de qualquer coisa acontecer. A cena continua sendo a unidade que guarda
+     * o `SceneSpec`, as versões e as gerações; o que sai é o passo, não o conceito.
+     *
+     * Numa transação: um projeto sem cena seria exatamente a tela vazia que se quis evitar,
+     * e agora sem formulário para sair dela.
+     */
+    const { project, firstScene } = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          workspaceId: principal.workspaceId,
+          name: input.name,
+          description: input.description ?? null,
+        },
+        select: projectSelect,
+      });
+
+      const spec = createEmptySceneSpec();
+      const scene = await tx.scene.create({
+        data: {
+          workspaceId: principal.workspaceId,
+          projectId: created.id,
+          // O nome do projeto, e não "Cena 1": na esmagadora maioria dos casos o projeto TEM
+          // uma cena só, e repetir o nome é mais reconhecível do que numerar.
+          name: input.name,
+          draftSpec: spec as unknown as Prisma.InputJsonValue,
+          specVersion: spec.version,
+        },
+        select: { id: true },
+      });
+
+      return { project: created, firstScene: scene };
     });
 
     await this.audit.record({
@@ -129,7 +160,7 @@ export class ProjectsService {
       ...(requestId ? { requestId } : {}),
     });
 
-    return { ...project, previewUrl: null };
+    return { ...project, previewUrl: null, firstSceneId: firstScene.id };
   }
 
   async update(

@@ -341,3 +341,43 @@ describe('isolamento das rotas de cena', () => {
     expect(intact.name).toBe('Confidencial');
   }, 120_000);
 });
+
+describe('projeto nasce com a primeira cena', () => {
+  it('cria a cena junto e devolve o id dela', async () => {
+    const session = await setup('primeira-cena');
+
+    const created = await call(session, 'POST', '/projects', { name: 'Campanha de verão' });
+    const project = JSON.parse(created.body) as { id: string; firstSceneId?: string };
+
+    // Sem isto a tela cairia numa lista vazia com outro formulário de nome — dois batismos
+    // antes de qualquer coisa acontecer.
+    expect(project.firstSceneId).toBeTruthy();
+
+    const scenes = JSON.parse(
+      (await call(session, 'GET', `/projects/${project.id}/scenes`)).body,
+    ) as { id: string; name: string }[];
+
+    expect(scenes).toHaveLength(1);
+    expect(scenes[0]?.id).toBe(project.firstSceneId);
+    // O nome do projeto, não "Cena 1": o projeto quase sempre tem uma cena só.
+    expect(scenes[0]?.name).toBe('Campanha de verão');
+  }, 60_000);
+
+  it('a cena nasce com um SceneSpec válido e editável', async () => {
+    const session = await setup('primeira-cena-spec');
+    const created = JSON.parse(
+      (await call(session, 'POST', '/projects', { name: 'Outra' })).body,
+    ) as { firstSceneId: string };
+
+    const scene = JSON.parse(
+      (await call(session, 'GET', `/scenes/${created.firstSceneId}`)).body,
+    ) as {
+      sceneSpec: { version: string };
+      revision: number;
+    };
+
+    expect(scene.sceneSpec.version).toBe('1.0');
+    // Editável de imediato: o autosave usa `revision` como compare-and-swap.
+    expect(scene.revision).toBe(0);
+  }, 60_000);
+});

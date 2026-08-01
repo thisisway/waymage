@@ -162,6 +162,8 @@ export interface SessionUser {
 }
 
 export interface Project {
+  /** Só na resposta de criação: a cena que nasceu junto com o projeto. */
+  firstSceneId?: string;
   id: string;
   name: string;
   description: string | null;

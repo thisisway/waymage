@@ -1374,6 +1374,28 @@ acao pode falhar, o caminho de falha precisa ser tao visivel quanto o de sucesso
 
 ---
 
+## D-074 — O projeto nasce com a primeira cena
+
+**Status:** aceita
+
+Criar um projeto levava a uma lista vazia com outro formulario de nome: dois batismos antes de
+qualquer coisa acontecer, e uma tela cujo unico conteudo era "nenhuma cena ainda".
+
+Agora `POST /projects` cria projeto e cena na mesma transacao e devolve `firstSceneId`, e a
+tela vai direto ao editor. Transacao porque um projeto sem cena seria exatamente a tela vazia
+que se quis evitar — agora sem formulario para sair dela.
+
+A cena herda o nome do projeto, e nao "Cena 1". O projeto quase sempre tem uma cena so, e
+repetir o nome e mais reconhecivel do que numerar algo que nunca chega a dois.
+
+**O que NAO foi feito, e por que.** A proposta original era remover a cena. Recusada: a cena e
+a unidade que guarda o `SceneSpec`, as versoes e as geracoes. Sem ela, explorar duas direcoes
+na mesma campanha exigiria dois projetos, perdendo a biblioteca de referencias compartilhada —
+que e justamente o que um projeto reune. O que sai e o passo, nao o conceito: a lista de cenas
+continua existindo para o projeto que cresce.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
