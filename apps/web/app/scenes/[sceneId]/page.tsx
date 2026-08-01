@@ -135,6 +135,10 @@ export default function SceneEditorPage() {
     mutationFn: (resultId: string) => api.selectResult(resultId),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: queryKeys.generation(generation.job?.id ?? '') }),
+    onError: (caught) =>
+      toast.error(
+        caught instanceof ApiError ? caught.message : 'Não foi possível escolher o resultado.',
+      ),
   });
 
   if (error instanceof ApiError && error.status === 401) {

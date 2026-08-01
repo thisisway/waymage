@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { ApiError, api, queryKeys, type Project } from '../../lib/api';
 import { timeAgo } from '../../lib/format';
 import { Icon } from '../../components/ui/icons';
+import { toast } from '../../components/ui/toast';
 
 /**
  * Lista de projetos, no formato de navegador de arquivos.
@@ -34,8 +35,15 @@ export default function ProjectsPage() {
     mutationFn: (name: string) => api.createProject({ name }),
     onSuccess: () => {
       setCreating(false);
+      toast.success('Projeto criado');
       return queryClient.invalidateQueries({ queryKey: queryKeys.projects });
     },
+    // Sem isto a falha some: o formulário fica aberto, nada aparece, e a pessoa clica de
+    // novo achando que não apertou direito. Operação que falha precisa dizer que falhou.
+    onError: (caught) =>
+      toast.error(
+        caught instanceof ApiError ? caught.message : 'Não foi possível criar o projeto.',
+      ),
   });
 
   const error = session.error ?? projects.error;

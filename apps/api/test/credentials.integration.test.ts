@@ -201,3 +201,73 @@ describe('credenciais de provedor', () => {
     expect(anonymous.statusCode).toBe(401);
   });
 });
+
+/**
+ * O token CSRF precisa chegar ao cliente pelo CORPO, não só pelo cookie.
+ *
+ * A regressão já aconteceu em produção: web e API em subdomínios diferentes, e
+ * `document.cookie` da página não enxerga o cookie da API. O browser continuava enviando o
+ * cookie — só a LEITURA não acontecia —, então toda mutação voltava 403 e a criação de
+ * projeto falhava sem dizer por quê.
+ *
+ * Em desenvolvimento não aparecia: `localhost:3000` e `localhost:3333` compartilham o host,
+ * porque cookie ignora porta.
+ */
+describe('token CSRF no corpo', () => {
+  it('vem no cadastro, no login e na sessão', async () => {
+    const email = `csrf-${randomUUID().slice(0, 8)}@teste.local`;
+    const password = 'uma senha bem longa para teste';
+
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { name: 'CSRF', email, password },
+    });
+    const fromRegister = (JSON.parse(registered.body) as { csrfToken?: string }).csrfToken;
+    expect(fromRegister, 'cadastro').toBeTruthy();
+
+    const loggedIn = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email, password },
+    });
+    const { header, csrf } = parseCookies(loggedIn.headers['set-cookie'] as string[] | undefined);
+    const fromLogin = (JSON.parse(loggedIn.body) as { csrfToken?: string }).csrfToken;
+
+    expect(fromLogin, 'login').toBeTruthy();
+    // O que veio no corpo tem de ser o MESMO do cookie: o servidor compara os dois, e valores
+    // diferentes recusariam toda mutação.
+    expect(fromLogin).toBe(csrf);
+
+    // Depois de um recarregamento a memória do cliente está vazia, e é por aqui que ele
+    // recupera o token — sem precisar ler cookie de outro host.
+    const session = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { cookie: header },
+    });
+    expect((JSON.parse(session.body) as { csrfToken?: string }).csrfToken).toBe(csrf);
+  });
+
+  it('o token do corpo autoriza uma mutação', async () => {
+    const email = `csrf-uso-${randomUUID().slice(0, 8)}@teste.local`;
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { name: 'CSRF', email, password: 'uma senha bem longa para teste' },
+    });
+
+    const { header } = parseCookies(registered.headers['set-cookie'] as string[] | undefined);
+    const token = (JSON.parse(registered.body) as { csrfToken: string }).csrfToken;
+
+    // Só o que o cliente consegue obter sem ler cookie: o corpo da resposta.
+    const created = await app.inject({
+      method: 'POST',
+      url: '/projects',
+      headers: { cookie: header, [CSRF_HEADER]: token },
+      payload: { name: 'Projeto pelo token do corpo' },
+    });
+
+    expect(created.statusCode, created.body).toBe(201);
+  });
+});

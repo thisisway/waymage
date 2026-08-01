@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
 import { ApiError, api, queryKeys } from '../../../lib/api';
+import { toast } from '../../../components/ui/toast';
 
 /** Cenas de um projeto. Ponto de entrada para o editor. */
 export default function ProjectScenesPage() {
@@ -25,6 +26,8 @@ export default function ProjectScenesPage() {
     mutationFn: (name: string) => api.createScene(projectId, { name }),
     // Vai direto para o editor: criar uma cena e ficar na lista não é o que ninguém quer.
     onSuccess: (scene) => router.push(`/scenes/${scene.id}`),
+    onError: (caught) =>
+      toast.error(caught instanceof ApiError ? caught.message : 'Não foi possível criar a cena.'),
   });
 
   const error = project.error ?? scenes.error;

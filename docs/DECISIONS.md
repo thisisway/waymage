@@ -1328,6 +1328,52 @@ banco.
 
 ---
 
+## D-072 — O token CSRF viaja no corpo, nao so no cookie
+
+**Status:** aceita (primeiro deploy) · corrige a [D-022](#d-022)
+
+O padrao de double-submit exige que a pagina LEIA o cookie e o espelhe num header. Com web e
+API no mesmo host isso funciona; em subdominios diferentes, nao: `document.cookie` da pagina
+so enxerga cookies do proprio host, e o cookie da API pertence ao host da API.
+
+O browser continuava enviando o cookie normalmente — a sessao valia, leituras funcionavam. So
+a leitura pelo JavaScript e que nao acontecia, entao toda mutacao voltava 403.
+
+Em desenvolvimento nunca apareceu porque cookie ignora porta: `localhost:3000` e
+`localhost:3333` sao o mesmo host.
+
+A correcao devolve o token tambem no corpo de `register`, `login`, `refresh` e `GET /auth/me`,
+e o cliente o guarda em memoria. **Nao afrouxa nada:** o CORS so autoriza a nossa origem a ler
+essas respostas, entao continua valendo que apenas a nossa pagina conhece o token, e a
+verificacao no servidor segue sendo cookie contra header.
+
+Memoria e nao `localStorage`: o token acompanha a sessao, e persisti-lo deixaria um valor
+sobrevivendo ao logout a espera de confundir a proxima. Depois de um recarregamento, `/auth/me`
+o devolve — e essa rota tira o valor do proprio cookie da requisicao, que o browser envia mesmo
+sem a pagina conseguir le-lo.
+
+A alternativa era `Domain=.<servidor>.easypanel.host` no cookie. Recusada: espalharia a sessao
+por todos os subdominios irmaos do servidor, incluindo aplicacoes de terceiros hospedadas ao
+lado.
+
+---
+
+## D-073 — Mutacao que falha precisa dizer que falhou
+
+**Status:** aceita (primeiro deploy)
+
+O sintoma que expos a [D-072](#d-072) nao foi um erro na tela: foi **nada**. O formulario de
+novo projeto ficava aberto, sem mensagem, e a impressao era de que o clique nao registrou.
+
+Tres `useMutation` no frontend nao tinham `onError` — criar projeto, criar cena e escolher
+resultado. O TanStack Query guarda o erro no estado da mutacao e nao faz mais nada; quem nao
+le esse estado engole a falha.
+
+Toda mutacao passa a ter `onError` com toast. A regra vale para o resto do frontend: se uma
+acao pode falhar, o caminho de falha precisa ser tao visivel quanto o de sucesso.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

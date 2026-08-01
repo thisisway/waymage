@@ -29,6 +29,18 @@ const CSRF_COOKIE = 'wm_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 
 /** Formato de erro da API (blueprint §31). */
+/** Resposta das rotas de sessão: o usuário e o token que prova a origem da requisição. */
+export interface Session {
+  user: SessionUser;
+  csrfToken: string;
+}
+
+/** Guarda o token e devolve a sessão, para encadear direto no `then`. */
+function keepSession(session: Session): Session {
+  rememberCsrf(session.csrfToken);
+  return session;
+}
+
 export interface ApiErrorBody {
   code: string;
   message: string;
@@ -49,13 +61,33 @@ export class ApiError extends Error {
 }
 
 /**
- * O token CSRF vem do único cookie de sessão legível por JavaScript.
+ * Token CSRF em memória.
  *
- * Access e refresh são httpOnly e nunca são lidos aqui — é o que impede um XSS de roubar a
- * sessão. Este valor sozinho não autoriza nada; serve só para provar que a requisição partiu
- * da nossa página, e não de um site de terceiro.
+ * Ele chega no corpo das respostas de sessão porque o cookie não é legível daqui: em produção
+ * a API vive noutro subdomínio, e `document.cookie` só enxerga cookies do próprio host. O
+ * browser continua enviando o cookie — só a leitura é que não acontece.
+ *
+ * Memória e não `localStorage`: o token acompanha a sessão, e persisti-lo criaria um valor
+ * sobrevivendo ao logout à espera de confundir a próxima sessão.
+ */
+let csrfMemo = '';
+
+export function rememberCsrf(token: string | undefined): void {
+  if (token) csrfMemo = token;
+}
+
+/**
+ * O token que prova que a requisição partiu da nossa página.
+ *
+ * Sozinho ele não autoriza nada — quem autoriza é o cookie de acesso, que é `httpOnly` e
+ * nunca é lido aqui. É essa separação que impede um XSS de roubar a sessão.
+ *
+ * O cookie continua servindo de fallback: em desenvolvimento, web e API compartilham
+ * `localhost` e a leitura funciona, então a sessão sobrevive a um recarregamento mesmo antes
+ * de `/auth/me` responder.
  */
 function csrfToken(): string {
+  if (csrfMemo) return csrfMemo;
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE}=([^;]*)`));
   return match?.[1] ? decodeURIComponent(match[1]) : '';
@@ -342,14 +374,14 @@ export async function fetchHealth(): Promise<HealthReport> {
 
 export const api = {
   register: (input: { name: string; email: string; password: string }) =>
-    apiFetch<{ user: SessionUser }>('/auth/register', { method: 'POST', body: input }),
+    apiFetch<Session>('/auth/register', { method: 'POST', body: input }).then(keepSession),
 
   login: (input: { email: string; password: string }) =>
-    apiFetch<{ user: SessionUser }>('/auth/login', { method: 'POST', body: input }),
+    apiFetch<Session>('/auth/login', { method: 'POST', body: input }).then(keepSession),
 
   logout: () => apiFetch<void>('/auth/logout', { method: 'POST' }),
 
-  me: () => apiFetch<{ user: SessionUser }>('/auth/me'),
+  me: () => apiFetch<Session>('/auth/me').then(keepSession),
 
   listProjects: () => apiFetch<Project[]>('/projects'),
 

@@ -15,6 +15,19 @@ import { CurrentUser, type AuthenticatedRequest } from './request-user';
 
 interface SessionResponse {
   user: AuthenticatedUser;
+  /**
+   * O token CSRF, tambem no corpo.
+   *
+   * O cookie `wm_csrf` e legivel por JavaScript, mas so pelo JavaScript do MESMO host. Em
+   * producao a API e o frontend vivem em subdominios diferentes, e `document.cookie` da
+   * pagina nao enxerga o cookie da API — a pagina recebe e devolve o cookie normalmente, mas
+   * nao consegue LER o valor para espelhar no header.
+   *
+   * Devolver aqui resolve sem afrouxar nada: o CORS so autoriza a nossa origem a ler esta
+   * resposta, entao continua valendo que apenas a nossa pagina conhece o token. E a
+   * verificacao no servidor segue sendo cookie contra header.
+   */
+  csrfToken: string;
 }
 
 @Controller('auth')
@@ -33,7 +46,7 @@ export class AuthController {
   ): Promise<SessionResponse> {
     const { user, tokens } = await this.auth.register(body, context(request));
     setSessionCookies(reply, tokens);
-    return { user };
+    return { user, csrfToken: tokens.csrfToken };
   }
 
   @Public()
@@ -47,7 +60,7 @@ export class AuthController {
   ): Promise<SessionResponse> {
     const { user, tokens } = await this.auth.login(body, context(request));
     setSessionCookies(reply, tokens);
-    return { user };
+    return { user, csrfToken: tokens.csrfToken };
   }
 
   /**
@@ -64,7 +77,7 @@ export class AuthController {
     const token = request.cookies?.[COOKIE.refresh] ?? '';
     const { user, tokens } = await this.auth.refresh(token, context(request));
     setSessionCookies(reply, tokens);
-    return { user };
+    return { user, csrfToken: tokens.csrfToken };
   }
 
   @Public()
@@ -78,9 +91,18 @@ export class AuthController {
     clearSessionCookies(reply);
   }
 
+  /**
+   * Sessao atual, e o token CSRF junto.
+   *
+   * O token sai do proprio cookie da requisicao: o browser o envia mesmo sem conseguir le-lo,
+   * entao esta rota e o caminho pelo qual a pagina recupera o valor depois de um recarregamento.
+   */
   @Get('me')
-  me(@CurrentUser() user: AuthenticatedUser): SessionResponse {
-    return { user };
+  me(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: AuthenticatedRequest,
+  ): SessionResponse {
+    return { user, csrfToken: request.cookies?.[COOKIE.csrf] ?? '' };
   }
 }
 
