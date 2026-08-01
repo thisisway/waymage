@@ -10,6 +10,10 @@ Sobem **cinco serviços** dentro de um projeto: Postgres e Redis pelos templates
 > Os nomes de botão do EasyPanel mudam entre versões. Onde o texto exato importar menos que a
 > função, o passo descreve o que procurar. Onde um valor precisa ser exato — caminho de
 > Dockerfile, porta, nome de variável — ele está literal.
+>
+> **A página de um serviço tem vários cartões empilhados**, e os campos de build estão
+> divididos entre dois deles: **Fonte** diz de onde vem o código, **Compilação** diz como
+> transformá-lo em imagem. Cada cartão tem o seu próprio botão _Salvar_.
 
 ---
 
@@ -55,7 +59,8 @@ Este valor não entra no repositório em nenhuma hipótese.
 
 ## Passo 1 — Crie o projeto
 
-No EasyPanel, **Projects → Create Project**. Nome: `waymage`.
+No EasyPanel, **Projects → Create Project**. O nome é seu — o guia usa `waymage`, mas
+qualquer um serve, desde que os cinco serviços fiquem no mesmo projeto.
 
 Tudo daqui em diante vive dentro dele. Serviços do mesmo projeto se enxergam por rede interna
 — é assim que a API fala com o banco sem expor Postgres à internet.
@@ -64,7 +69,7 @@ Tudo daqui em diante vive dentro dele. Serviços do mesmo projeto se enxergam po
 
 ## Passo 2 — Postgres
 
-**+ Service → Postgres.**
+**+ Serviço → Postgres.**
 
 | Campo   | Valor      |
 | ------- | ---------- |
@@ -90,7 +95,7 @@ usuário real, não depois do primeiro susto.
 
 ## Passo 3 — Redis
 
-**+ Service → Redis.** Nome: `redis`. Copie a URL interna do mesmo jeito
+**+ Serviço → Redis.** Nome: `redis`. Copie a URL interna do mesmo jeito
 (`redis://waymage_redis:6379`).
 
 Redis aqui é fila (BullMQ) e canal de eventos do progresso ao vivo, não cache descartável —
@@ -124,19 +129,30 @@ bucket público tornaria toda imagem de todo cliente acessível a quem descobris
 
 ## Passo 5 — Serviço `api`
 
-**+ Service → App.** Nome: `api`.
+**+ Serviço → App.** Nome: `api`.
 
-**Source:** GitHub → repositório `thisisway/waymage` → branch `main`.
+**Cartão Fonte** — aba **Github** (não a aba _Dockerfile_, que serve para colar um Dockerfile
+inline):
 
-**Build:** método **Dockerfile**.
+| Campo            | Valor               |
+| ---------------- | ------------------- |
+| Repositório      | `thisisway/waymage` |
+| Ramo             | `main`              |
+| Caminho de Build | `/`                 |
 
-| Campo           | Valor                 |
-| --------------- | --------------------- |
-| Dockerfile Path | `apps/api/Dockerfile` |
-| Build Context   | `/` (raiz do repo)    |
+**Salvar.**
 
-O contexto na raiz não é detalhe: é um monorepo pnpm, e o Dockerfile precisa enxergar
-`pnpm-workspace.yaml` e os `packages/` para instalar e gerar o cliente Prisma.
+O "Caminho de Build" é o **contexto** do `docker build`, e fica na raiz mesmo o app estando em
+`apps/api`. É contraintuitivo e é de propósito: num monorepo pnpm, o Dockerfile precisa
+enxergar `pnpm-workspace.yaml` e os `packages/` para instalar e gerar o cliente Prisma.
+
+**Cartão Compilação** — role a página até ele. Método **Dockerfile**:
+
+| Campo                | Valor                 |
+| -------------------- | --------------------- |
+| Arquivo (Dockerfile) | `apps/api/Dockerfile` |
+
+**Salvar.**
 
 **Environment** — cole tudo de uma vez:
 
@@ -214,26 +230,36 @@ Anote a decisão; ela é aplicada no passo 8.
 
 ## Passo 7 — Serviço `web`
 
-**+ Service → App.** Nome: `web`. Mesmo repositório e branch.
+**+ Serviço → App.** Nome: `web`.
 
-**Build:** método **Dockerfile**.
+**Cartão Fonte** — aba **Github**, igual à API:
 
-| Campo           | Valor                 |
-| --------------- | --------------------- |
-| Dockerfile Path | `apps/web/Dockerfile` |
-| Build Context   | `/`                   |
+| Campo            | Valor               |
+| ---------------- | ------------------- |
+| Repositório      | `thisisway/waymage` |
+| Ramo             | `main`              |
+| Caminho de Build | `/`                 |
 
-**Build Args** — este é o campo que a maioria esquece:
+**Cartão Compilação** — método **Dockerfile**:
+
+| Campo                | Valor                 |
+| -------------------- | --------------------- |
+| Arquivo (Dockerfile) | `apps/web/Dockerfile` |
+
+**Cartão Ambiente** — a variável que a maioria esquece:
 
 ```
 NEXT_PUBLIC_API_URL=https://<URL pública da api>
 ```
 
-Sem ele, o frontend sai buildado apontando para `http://localhost:3333` e nenhuma tela carrega
-dado. Não adianta corrigir depois na aba de ambiente: o valor entra no bundle no momento do
-build.
+Ela é **embutida no bundle durante o build**, não lida em runtime. O `apps/web/Dockerfile` já
+declara o `ARG` correspondente, e a documentação do EasyPanel diz que as variáveis de ambiente
+"são fornecidas ao build e ao container em execução" — então definir aqui basta.
 
-**Environment:** nada obrigatório.
+**Como saber se funcionou:** depois do deploy, abra o app e olhe o console do browser. Se os
+requests forem para `localhost:3333`, o valor não chegou ao build. Nesse caso a saída é fazer o
+próprio Next servir de proxy para a API, com URL lida em runtime — o que também dispensaria o
+`COOKIE_SAMESITE` do passo 6.
 
 **Domains:** adicione um domínio, com a porta interna `3000`.
 
@@ -260,16 +286,18 @@ errado, o browser bloqueia todo request e o console mostra erro de CORS.
 
 ## Passo 9 — Serviço `worker`
 
-**+ Service → App.** Nome: `worker`. Mesmo repositório e branch.
+**+ Serviço → App.** Nome: `worker`.
 
-**Build:** método **Dockerfile**.
+**Cartão Fonte** — aba **Github**, igual aos outros: repositório `thisisway/waymage`, ramo
+`main`, Caminho de Build `/`.
 
-| Campo           | Valor                               |
-| --------------- | ----------------------------------- |
-| Dockerfile Path | `apps/worker-generation/Dockerfile` |
-| Build Context   | `/`                                 |
+**Cartão Compilação** — método **Dockerfile**:
 
-**Environment:**
+| Campo                | Valor                               |
+| -------------------- | ----------------------------------- |
+| Arquivo (Dockerfile) | `apps/worker-generation/Dockerfile` |
+
+**Cartão Ambiente:**
 
 ```
 NODE_ENV=production
@@ -327,7 +355,8 @@ pesado. Se o VPS for apertado, prefira deploy manual do `web`.
 | ------------------------------------------------ | ------------------------------------------------------------------------ |
 | Cadastro dá 200, tudo depois dá 401              | `COOKIE_SAMESITE` errado para o formato das URLs (passo 6)               |
 | Erro de CORS no console do browser               | `APP_URL` da API não é exatamente a URL do web, com `https://`           |
-| Telas carregam vazias, requests para `localhost` | `NEXT_PUBLIC_API_URL` faltou no **build arg** do web — precisa rebuild   |
+| Telas carregam vazias, requests para `localhost` | `NEXT_PUBLIC_API_URL` não chegou ao build do web — precisa rebuild       |
+| Campo de Dockerfile não aparece no cartão Fonte  | Ele fica no cartão **Compilação**, mais abaixo na mesma página           |
 | API reinicia sem parar                           | Health check apontando para rota que exige autenticação, ou porta errada |
 | API sobe e morre no boot                         | Variável obrigatória faltando — o log diz o nome dela                    |
 | `JWT_ACCESS_SECRET precisa de ao menos 32…`      | Segredo curto; gere de novo com `openssl rand -base64 48`                |
