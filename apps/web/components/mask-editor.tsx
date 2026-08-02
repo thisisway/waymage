@@ -26,6 +26,9 @@ const MAX_ZOOM = 4;
 /** Passo de expandir/contrair, em pixels da imagem. */
 const RESHAPE_STEP = 4;
 
+/** Passos de desfazer guardados. Cada um ocupa largura × altura × 4 bytes. */
+const HISTORY_LIMIT = 10;
+
 /** Cor da pintura na tela. Some na exportação, que decide pelo alfa. */
 const PAINT: readonly [number, number, number] = [29, 102, 255];
 
@@ -65,6 +68,19 @@ export function MaskEditor({
   const painting = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
 
+  /**
+   * Histórico para desfazer.
+   *
+   * `ImageData` cru, e não PNG: converter custa dezenas de milissegundos e o instantâneo é
+   * tirado no início de cada traço — a pausa apareceria justamente no gesto de pintar.
+   *
+   * O teto existe porque cada passo ocupa `largura × altura × 4` bytes, e uma imagem de 2K
+   * dá 16 MB por passo. Dez passos cobrem o erro que se percebe na hora, que é o caso real;
+   * quem errou dez traços atrás não desfaz, repinta.
+   */
+  const history = useRef<ImageData[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
   const [brush, setBrush] = useState(Math.max(16, Math.round(width / 12)));
   const [zoom, setZoom] = useState(1);
@@ -75,11 +91,57 @@ export function MaskEditor({
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      const target = event.target as HTMLElement | null;
+      // Digitar a instrução não pode acionar ferramenta: `[` é um caractere, não um atalho,
+      // enquanto o cursor está num campo de texto.
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (typing) return;
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      // Colchetes para espessura: é a convenção de todo editor de imagem, e a mão já sabe.
+      if (event.key === '[') setBrush((size) => Math.max(4, Math.round(size * 0.8)));
+      if (event.key === ']') setBrush((size) => Math.round(size * 1.25));
     }
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // `onClose` só: `undo` e `setBrush` são estáveis o bastante e reassinar o listener a
+    // cada traço trocaria um problema inexistente por trabalho a cada render.
   }, [onClose]);
+
+  /** Guarda o estado ANTES de uma alteração. Desfazer é voltar ao topo desta pilha. */
+  function snapshot(): void {
+    const context = canvas.current?.getContext('2d');
+    if (!context) return;
+
+    history.current.push(context.getImageData(0, 0, width, height));
+    if (history.current.length > HISTORY_LIMIT) history.current.shift();
+    setCanUndo(true);
+  }
+
+  function undo(): void {
+    const context = canvas.current?.getContext('2d');
+    const previous = history.current.pop();
+    if (!context || !previous) return;
+
+    context.globalCompositeOperation = 'source-over';
+    context.putImageData(previous, 0, 0);
+    setCanUndo(history.current.length > 0);
+
+    // Voltar ao primeiro instantâneo devolve a tela em branco, e o botão de gerar precisa
+    // saber disso: sem máscara não há o que editar.
+    setPainted(history.current.length > 0 || hasPaint(context, width, height));
+  }
 
   /** Converte coordenada de tela em pixel da imagem, independentemente do zoom. */
   function pointAt(event: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } {
@@ -131,6 +193,8 @@ export function MaskEditor({
     const context = target?.getContext('2d');
     if (!target || !context || !painted) return;
 
+    snapshot();
+
     const buffer = document.createElement('canvas');
     buffer.width = width;
     buffer.height = height;
@@ -157,6 +221,7 @@ export function MaskEditor({
   }
 
   function clear(): void {
+    snapshot();
     canvas.current?.getContext('2d')?.clearRect(0, 0, width, height);
     setPainted(false);
   }
@@ -260,6 +325,9 @@ export function MaskEditor({
               height={height}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
+                // Um traço inteiro é um passo: guardar por movimento encheria o histórico
+                // com estados que ninguém quer revisitar.
+                snapshot();
                 painting.current = true;
                 const point = pointAt(event);
                 stroke(null, point);
@@ -292,6 +360,15 @@ export function MaskEditor({
               </ToolButton>
               <ToolButton active={tool === 'eraser'} onClick={() => setTool('eraser')} icon="close">
                 borracha
+              </ToolButton>
+              <ToolButton
+                active={false}
+                onClick={undo}
+                icon="variation"
+                disabled={!canUndo}
+                title="Desfazer (Ctrl+Z)"
+              >
+                desfazer
               </ToolButton>
               <ToolButton active={false} onClick={clear} icon="trash">
                 limpar
@@ -393,17 +470,28 @@ export function MaskEditor({
   );
 }
 
+/** Há alguma coisa pintada? Percorre só o alfa, um byte a cada quatro. */
+function hasPaint(context: CanvasRenderingContext2D, width: number, height: number): boolean {
+  const { data } = context.getImageData(0, 0, width, height);
+  for (let i = 3; i < data.length; i += 4) {
+    if ((data[i] ?? 0) > 0) return true;
+  }
+  return false;
+}
+
 function ToolButton({
   active,
   onClick,
   icon,
   disabled,
+  title,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  icon: 'plus' | 'close' | 'trash';
+  icon: 'plus' | 'close' | 'trash' | 'variation';
   disabled?: boolean;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -411,6 +499,7 @@ function ToolButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       aria-pressed={active}
       className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 text-micro font-semibold transition-all duration-fast ease-out active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 ${
         active

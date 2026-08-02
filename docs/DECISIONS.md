@@ -1562,6 +1562,11 @@ no log — pior que a composicao, muito melhor que perder uma geracao ja paga.
 fica com emenda, porque tudo fora da mascara esta travado. Quem quer redesenho tem "refinar".
 Se isso incomodar na pratica, a saida e uma escolha explicita na tela, nao um padrao diferente.
 
+**Duas melhorias que eu tinha proposto perderam sentido com esta.** Um pincel de borda macia
+existiria para suavizar a costura — que agora e o `featherPx`, aplicado onde importa, na
+composicao. E mostrar a mascara no antes-e-depois servia para lembrar qual regiao foi alvo —
+que agora e obvio, porque so ela mudou. Ambas sairam da lista.
+
 ---
 
 ## D-079 — Tres operacoes do `sharp` nao fizeram o que a API sugere

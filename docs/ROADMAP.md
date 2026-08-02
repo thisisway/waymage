@@ -175,6 +175,7 @@ imagem) e restaurar uma versão antiga da cena para o rascunho.
 - [x] Expandir/contrair a máscara, por desfoque com limiar (D-053)
 - [x] Resultado composto através da máscara: fora dela, os pixels originais (D-078)
 - [x] Base enviada ao provedor com a região contornada (D-078)
+- [x] Desfazer no editor de máscara, com `Ctrl+Z` e colchetes para espessura
 - [x] Antes-e-depois com cortina entre o resultado de origem e o editado (D-054)
 - [x] Travas do SceneSpec no inspetor, e aviso das ativas no editor de máscara (D-055)
 
