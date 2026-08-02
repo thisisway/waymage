@@ -10,6 +10,10 @@ dois adapters reais dependem de chave de API e, portanto, de autorização.
 
 Legenda: ✅ concluída · 🔜 próxima · ⬜ planejada
 
+**Fora da numeração original:** o modelo de negócio mudou para mensalidade + chave do próprio
+usuário (D-070). O BYOK está completo; a assinatura tem o modelo e o bloqueio (D-080), e falta
+a integração com a Stripe.
+
 ---
 
 ## ✅ Fase 1 — Fundação

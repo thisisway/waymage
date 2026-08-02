@@ -304,3 +304,72 @@ describe('sem chave de IA', () => {
     expect(estimate.needsCredential).toBe(estimate.provider === '—');
   }, 60_000);
 });
+
+describe('assinatura', () => {
+  it('cadastro novo entra em avaliação e pode gerar', async () => {
+    const session = await setup('assinatura-nova');
+    const scene = JSON.parse(
+      (await call(session, 'POST', `/projects/${session.projectId}/scenes`, { name: 'Cena' })).body,
+    ) as { id: string };
+
+    const estimate = JSON.parse(
+      (await call(session, 'POST', '/generation-jobs/estimate', { sceneId: scene.id })).body,
+    ) as { subscription: { status: string; active: boolean; trialDaysLeft: number | null } };
+
+    expect(estimate.subscription.status).toBe('TRIALING');
+    expect(estimate.subscription.active).toBe(true);
+    // O relógio começa no cadastro, não na primeira geração: quem contrata precisa de uma
+    // data previsível.
+    expect(estimate.subscription.trialDaysLeft).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('avaliação vencida recusa a geração com 402', async () => {
+    const session = await setup('assinatura-vencida');
+    const scene = JSON.parse(
+      (await call(session, 'POST', `/projects/${session.projectId}/scenes`, { name: 'Cena' })).body,
+    ) as { id: string };
+
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: session.projectId },
+      select: { workspaceId: true },
+    });
+    await prisma.workspace.update({
+      where: { id: project.workspaceId },
+      data: { trialEndsAt: new Date(Date.now() - 86_400_000) },
+    });
+
+    const response = await call(
+      session,
+      'POST',
+      '/generation-jobs',
+      { sceneId: scene.id },
+      { 'idempotency-key': randomUUID() },
+    );
+
+    // 402 e não 403: o problema não é permissão, é pagamento — e a diferença muda o que a
+    // tela oferece como saída.
+    expect(response.statusCode).toBe(402);
+    expect(JSON.parse(response.body).code).toBe('SUBSCRIPTION_INACTIVE');
+  }, 60_000);
+
+  it('as cenas continuam acessíveis com a assinatura vencida', async () => {
+    const session = await setup('assinatura-leitura');
+    const scene = JSON.parse(
+      (await call(session, 'POST', `/projects/${session.projectId}/scenes`, { name: 'Cena' })).body,
+    ) as { id: string };
+
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: session.projectId },
+      select: { workspaceId: true },
+    });
+    await prisma.workspace.update({
+      where: { id: project.workspaceId },
+      data: { subscriptionStatus: 'CANCELED' },
+    });
+
+    // O que para é gerar. O trabalho já feito continua do dono — trancá-lo seria usar o
+    // conteúdo do usuário como refém da cobrança.
+    expect((await call(session, 'GET', `/scenes/${scene.id}`)).statusCode).toBe(200);
+    expect((await call(session, 'GET', '/projects')).statusCode).toBe(200);
+  }, 60_000);
+});

@@ -6,6 +6,7 @@ import { AppError } from '../common/app-error';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../infra/prisma.service';
 import type { LoginInput, RegisterInput } from './auth.schemas';
+import { trialEndsFrom } from '../subscriptions/subscription';
 import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from './password';
 import {
   ACCESS_TOKEN_AUDIENCE,
@@ -80,6 +81,9 @@ export class AuthService {
           name: workspaceName,
           slug: await this.uniqueSlug(tx, workspaceName),
           members: { create: { userId: user.id, role: WorkspaceRole.OWNER } },
+          // A avaliação começa no cadastro, não na primeira geração: o relógio precisa ser
+          // previsível para quem contrata, e "quando você começou a usar" não é uma data.
+          trialEndsAt: trialEndsFrom(),
         },
         select: { id: true },
       });

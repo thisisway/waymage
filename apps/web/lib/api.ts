@@ -393,9 +393,18 @@ export interface ProviderAlternative {
   notes: string[];
 }
 
+export interface Subscription {
+  status: 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+  active: boolean;
+  trialDaysLeft: number | null;
+  reason: string | null;
+}
+
 export interface Estimate {
   /** Sem chave de IA cadastrada não há como gerar — e a saída é outra tela. */
   needsCredential: boolean;
+  /** Acesso ao editor. Distinto da chave: são duas cobranças diferentes. */
+  subscription: Subscription;
   provider: string;
   estimatedSeconds: number;
   count: number;

@@ -19,6 +19,7 @@ import {
   type RoutingRequest,
 } from '@waymage/provider-sdk';
 import { openSecret } from '@waymage/domain';
+import { subscriptionState, type SubscriptionState } from '../subscriptions/subscription';
 import { env } from '../config/env';
 import { promptCompiler } from '@waymage/prompt-compiler';
 import { hasBlockingIssues, parseSceneSpec, validateSceneSpec } from '@waymage/scene-spec';
@@ -116,6 +117,8 @@ export interface EstimateView {
    * procurar um problema que não existe.
    */
   needsCredential: boolean;
+  /** Estado da assinatura. Bloqueio aqui é de acesso ao editor, não de chave do fornecedor. */
+  subscription: SubscriptionState;
   provider: string;
   estimatedSeconds: number;
   count: number;
@@ -181,7 +184,31 @@ export class GenerationsService {
    * reserva de crédito. Rotear apenas na execução deixaria o usuário ver um preço e pagar
    * outro.
    */
+  /**
+   * Estado da assinatura do workspace.
+   *
+   * Consultado a cada geração, e não guardado na sessão: uma avaliação vence sozinha, e um
+   * token emitido ontem afirmaria hoje uma coisa que deixou de ser verdade.
+   */
+  private async subscription(workspaceId: string): Promise<SubscriptionState> {
+    const workspace = await this.prisma.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { subscriptionStatus: true, trialEndsAt: true, currentPeriodEnd: true },
+    });
+
+    return subscriptionState(workspace);
+  }
+
   private async route(workspaceId: string, request: RoutingRequest) {
+    const plan = await this.subscription(workspaceId);
+    if (!plan.active) {
+      throw new AppError(
+        'SUBSCRIPTION_INACTIVE',
+        plan.reason ?? 'Assinatura inativa.',
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+
     const registry = await this.registryFor(workspaceId);
 
     if (registry.ids().length === 0) {
@@ -213,6 +240,7 @@ export class GenerationsService {
 
     // Roteia antes de compilar: o prompt depende das capacidades de quem vai receber,
     // porque provedor sem negative prompt recebe as restrições dentro do prompt principal.
+    const plan = await this.subscription(principal.workspaceId);
     const registry = await this.registryFor(principal.workspaceId);
     const ranked =
       registry.ids().length === 0
@@ -234,6 +262,7 @@ export class GenerationsService {
 
     return {
       needsCredential: registry.ids().length === 0,
+      subscription: plan,
       provider: chosen?.provider ?? '—',
       estimatedSeconds: Math.ceil(
         ((chosen?.estimatedLatencyMs ?? 0) * scene.sceneSpec.output.count) / 1000,
@@ -258,7 +287,7 @@ export class GenerationsService {
         level: issue.level,
         message: issue.message,
       })),
-      canGenerate: Boolean(chosen?.eligible) && !hasBlockingIssues(issues),
+      canGenerate: plan.active && Boolean(chosen?.eligible) && !hasBlockingIssues(issues),
     };
   }
 

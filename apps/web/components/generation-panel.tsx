@@ -25,7 +25,28 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
     canGenerate,
     alternatives,
     needsCredential,
+    subscription,
   } = estimate.data;
+
+  /**
+   * Assinatura inativa vem antes de tudo.
+   *
+   * É bloqueio de acesso ao editor, e não de chave do fornecedor — são duas cobranças
+   * diferentes, e apresentá-las juntas faria a pessoa mexer na que já está certa.
+   */
+  if (!subscription.active) {
+    return (
+      <div className="animate-rise mx-auto w-full max-w-2xl rounded-lg border border-state-error/30 bg-state-error/[0.06] p-4">
+        <p className="flex gap-2.5 text-[13px] leading-relaxed text-ink-secondary">
+          <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0 text-state-error" />
+          <span>
+            <strong className="text-ink-primary">{subscription.reason}</strong> Suas cenas,
+            referências e imagens continuam aqui — o que para é a geração de novas.
+          </span>
+        </p>
+      </div>
+    );
+  }
 
   /**
    * Falta de chave tem tela própria.
@@ -62,6 +83,14 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
 
   return (
     <div className="animate-rise mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-raised p-4 shadow-sm">
+      {subscription.status === 'TRIALING' && subscription.trialDaysLeft !== null && (
+        <p className="mb-3 flex items-center gap-2 text-micro text-ink-muted">
+          <Icon name="info" className="h-3.5 w-3.5 shrink-0 text-accent-40" />
+          Avaliação: {subscription.trialDaysLeft}{' '}
+          {subscription.trialDaysLeft === 1 ? 'dia restante' : 'dias restantes'}
+        </p>
+      )}
+
       <p className="text-[13px] leading-relaxed text-ink-secondary">{summary}</p>
 
       <dl className="mt-3 grid grid-cols-3 gap-2">

@@ -96,6 +96,19 @@ enum ProviderRunStatus {
   CANCELLED
 }
 
+/// Estado da assinatura do workspace.
+///
+/// Os quatro valores sao os que qualquer gateway reporta, entao trocar de gateway nao muda o
+/// modelo — muda quem escreve neles.
+enum SubscriptionStatus {
+  /// Periodo de avaliacao, com prazo em `trialEndsAt`.
+  TRIALING
+  ACTIVE
+  /// Cobranca falhou. Continua funcionando por um tempo: cartao vencido nao e cancelamento.
+  PAST_DUE
+  CANCELED
+}
+
 enum ModerationTarget {
   PROMPT_TEXT
   REFERENCE_IMAGE
@@ -171,13 +184,18 @@ model RefreshToken {
 }
 
 model Workspace {
-  id        String    @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String    @unique
-  planCode  String    @default("free")
-  createdAt DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
-  deletedAt DateTime? @db.Timestamptz(6)
+  id                 String             @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String             @unique
+  planCode           String             @default("free")
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  /// Fim da avaliacao. Nulo em workspace que nunca esteve em avaliacao.
+  trialEndsAt        DateTime?          @db.Timestamptz(6)
+  /// Ate quando o periodo pago vale. Escrito pelo gateway quando houver um.
+  currentPeriodEnd   DateTime?          @db.Timestamptz(6)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?          @db.Timestamptz(6)
 
   members             WorkspaceMember[]
   projects            Project[]

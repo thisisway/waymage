@@ -1589,6 +1589,41 @@ E o motivo de os testes desta area conferirem cor de pixel em vez de "nao lancou
 
 ---
 
+## D-080 — Assinatura modelada antes do gateway
+
+**Status:** aceita · primeira metade da mensalidade da [D-070](#d-070)
+
+O estado da assinatura vive no workspace, em quatro valores que qualquer gateway reporta:
+`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`. Trocar de gateway — ou nao ter nenhum — nao muda
+o modelo; muda quem escreve neles.
+
+Mesmo padrao que funcionou no BYOK: o dominio primeiro, o fornecedor depois. Da para convidar
+os primeiros usuarios hoje, liberando na mao, sem esperar integracao de pagamento.
+
+**Duas cobrancas distintas, e confundi-las bloquearia a pessoa errada.** O Waymage cobra o
+acesso ao editor; a geracao e paga pelo usuario direto ao fornecedor, com a chave dele. A tela
+apresenta os dois bloqueios separados, porque a saida de cada um e outra.
+
+**`PAST_DUE` nao corta na hora.** Cartao vence, banco recusa por engano, o gateway tenta de novo
+em dias. O periodo ja pago continua valendo; depois dele, bloqueia. Cortar no primeiro erro
+puniria justamente quem quer pagar.
+
+**Avaliacao sem prazo gravado conta como aberta.** Workspace criado antes deste campo existir
+nao pode ser trancado por uma migracao.
+
+**O que para e gerar.** Cenas, referencias e imagens continuam acessiveis com a assinatura
+vencida — usar o trabalho do usuario como refem da cobranca e uma forma de coercao, nao de
+cobranca. Ha teste para isso.
+
+**402, nao 403.** O problema nao e permissao, e pagamento, e a diferenca muda o que a tela
+oferece como saida.
+
+**Falta o gateway.** Stripe foi escolhido; a integracao escreve nos campos que ja existem e
+adiciona checkout e webhook. Ate la, ativar e um UPDATE — suficiente para os primeiros
+convidados.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
