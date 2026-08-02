@@ -1,4 +1,5 @@
 import { FakeImageProvider } from './fake-provider';
+import { GoogleImageProvider } from './google-provider';
 import { ProviderRegistry } from './registry';
 
 /**
@@ -15,6 +16,7 @@ import { ProviderRegistry } from './registry';
 export const PROVIDER_IDS = {
   fast: 'fake-rapido',
   studio: 'fake-estudio',
+  google: 'google-gemini',
 } as const;
 
 /**
@@ -26,6 +28,7 @@ export const PROVIDER_IDS = {
 export const PROVIDER_QUALITY: Readonly<Record<string, number>> = {
   [PROVIDER_IDS.fast]: 0.55,
   [PROVIDER_IDS.studio]: 0.9,
+  [PROVIDER_IDS.google]: 0.95,
 };
 
 export function createProviderRegistry(options: { latencyMs?: number } = {}): ProviderRegistry {
@@ -49,4 +52,36 @@ export function createProviderRegistry(options: { latencyMs?: number } = {}): Pr
         },
       }),
     );
+}
+
+/**
+ * Os provedores que ESTE workspace pode usar.
+ *
+ * Duas fontes, e a diferença entre elas é quem paga:
+ *
+ * - **Fakes** não têm fornecedor nem fatura. Ficam disponíveis só fora de produção, para que
+ *   `pnpm dev` funcione sem configuração nenhuma. Deixá-los em produção daria um modo de
+ *   demonstração que produz imagem sem serventia, e cobra a mensalidade por isso.
+ * - **Reais** entram um a um, conforme o workspace tenha credencial. Sem credencial o
+ *   provedor simplesmente não é registrado, e o roteador nem chega a considerá-lo — é a
+ *   mesma mecânica de elegibilidade da D-056, sem código novo de decisão.
+ *
+ * Um registro por job, e não um do processo: a chave é de quem pediu.
+ */
+export function createWorkspaceRegistry(options: {
+  credentials: readonly { provider: string; secret: string }[];
+  includeFakes: boolean;
+  fakeLatencyMs?: number;
+}): ProviderRegistry {
+  const registry = options.includeFakes
+    ? createProviderRegistry({ latencyMs: options.fakeLatencyMs ?? 1200 })
+    : new ProviderRegistry();
+
+  for (const credential of options.credentials) {
+    if (credential.provider === PROVIDER_IDS.google) {
+      registry.register(new GoogleImageProvider({ apiKey: credential.secret }));
+    }
+  }
+
+  return registry;
 }

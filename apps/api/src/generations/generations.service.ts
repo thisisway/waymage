@@ -13,9 +13,13 @@ import { isTerminal, STATE_LABELS, STATE_PROGRESS, type GenerationState } from '
 import {
   ModelRouter,
   PROVIDER_QUALITY,
-  createProviderRegistry,
+  createWorkspaceRegistry,
+  type ProviderCapabilities,
+  type ProviderRegistry,
   type RoutingRequest,
 } from '@waymage/provider-sdk';
+import { openSecret } from '@waymage/domain';
+import { env } from '../config/env';
 import { promptCompiler } from '@waymage/prompt-compiler';
 import { hasBlockingIssues, parseSceneSpec, validateSceneSpec } from '@waymage/scene-spec';
 import { AuditService } from '../audit/audit.service';
@@ -129,13 +133,29 @@ export class GenerationsService {
    * aceitar um job que o provedor não consegue executar é a pior hora de descobrir.
    */
   /**
-   * O mesmo conjunto que o worker executa.
+   * Os provedores DESTE workspace — o mesmo conjunto que o worker vai executar.
    *
-   * Estimar sobre uma lista e gerar com outra produziria um número que não corresponde a
-   * nada — e a diferença só apareceria depois, na cobrança.
+   * Não é um registro do processo: com BYOK (D-070) a chave é do usuário, e dois workspaces
+   * têm contas diferentes no mesmo fornecedor. Estimar sobre uma lista e gerar com outra
+   * mostraria um provedor na tela e usaria outro na fatura.
+   *
+   * A chave é decifrada, usada para montar o adapter, e não sobrevive à requisição.
    */
-  private readonly registry = createProviderRegistry();
-  private readonly router = new ModelRouter(this.registry);
+  private async registryFor(workspaceId: string): Promise<ProviderRegistry> {
+    const rows = await this.prisma.providerCredential.findMany({
+      where: { workspaceId, revokedAt: null },
+      select: { provider: true, secretSealed: true },
+    });
+
+    return createWorkspaceRegistry({
+      credentials: rows.map((row) => ({
+        provider: row.provider,
+        secret: openSecret(row.secretSealed, env.CREDENTIALS_ENCRYPTION_KEY),
+      })),
+      // Fora de produção os fakes ficam, para o desenvolvimento não exigir chave de ninguém.
+      includeFakes: env.NODE_ENV !== 'production',
+    });
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -153,8 +173,18 @@ export class GenerationsService {
    * reserva de crédito. Rotear apenas na execução deixaria o usuário ver um preço e pagar
    * outro.
    */
-  private async route(request: RoutingRequest) {
-    const ranked = await this.router.rank(request, { quality: PROVIDER_QUALITY });
+  private async route(workspaceId: string, request: RoutingRequest) {
+    const registry = await this.registryFor(workspaceId);
+
+    if (registry.ids().length === 0) {
+      throw new AppError(
+        'NO_PROVIDER_CREDENTIAL',
+        'Cadastre uma chave de IA para gerar imagens.',
+        HttpStatus.PRECONDITION_REQUIRED,
+      );
+    }
+
+    const ranked = await new ModelRouter(registry).rank(request, { quality: PROVIDER_QUALITY });
     const best = ranked.find((entry) => entry.eligible);
 
     if (!best) {
@@ -166,7 +196,7 @@ export class GenerationsService {
       );
     }
 
-    return best;
+    return { ...best, registry };
   }
 
   async estimate(principal: RequestPrincipal, input: EstimateInput): Promise<EstimateView> {
@@ -175,18 +205,22 @@ export class GenerationsService {
 
     // Roteia antes de compilar: o prompt depende das capacidades de quem vai receber,
     // porque provedor sem negative prompt recebe as restrições dentro do prompt principal.
-    const ranked = await this.router.rank(routingFor(scene.sceneSpec, mode), {
-      quality: PROVIDER_QUALITY,
-    });
+    const registry = await this.registryFor(principal.workspaceId);
+    const ranked =
+      registry.ids().length === 0
+        ? []
+        : await new ModelRouter(registry).rank(routingFor(scene.sceneSpec, mode), {
+            quality: PROVIDER_QUALITY,
+          });
     const chosen = ranked.find((entry) => entry.eligible) ?? ranked[0];
-    const provider = chosen ? this.registry.get(chosen.provider) : null;
+    const provider = chosen ? registry.get(chosen.provider) : null;
     const capabilities = provider?.getCapabilities();
 
     const issues = validateSceneSpec(scene.sceneSpec, capabilities ? { capabilities } : {});
 
     const compilation = await promptCompiler.compile({
       sceneSpec: scene.sceneSpec,
-      providerCapabilities: capabilities ?? this.registry.all()[0]!.getCapabilities(),
+      providerCapabilities: capabilities ?? FALLBACK_CAPABILITIES,
       mode,
     });
 
@@ -249,9 +283,9 @@ export class GenerationsService {
     const scene = await this.scenes.get(principal, input.sceneId);
     const mode = scene.sceneSpec.output.quality === 'final' ? 'final' : 'draft';
 
-    const chosen = await this.route(routingFor(scene.sceneSpec, mode));
+    const chosen = await this.route(principal.workspaceId, routingFor(scene.sceneSpec, mode));
     const issues = validateSceneSpec(scene.sceneSpec, {
-      capabilities: this.registry.get(chosen.provider).getCapabilities(),
+      capabilities: chosen.registry.get(chosen.provider).getCapabilities(),
     });
 
     if (hasBlockingIssues(issues)) {
@@ -418,7 +452,7 @@ export class GenerationsService {
     // Rotear aqui não escolhe nada que o worker vá reusar — ele roteia de novo, com dados de
     // confiabilidade mais frescos. Serve para recusar cedo: se nenhum provedor atende a esta
     // operação, é melhor dizer agora do que enfileirar um job condenado.
-    await this.route({
+    await this.route(principal.workspaceId, {
       ...routingFor(spec, mode === 'edit' ? 'final' : mode),
       operation,
       count,
@@ -676,6 +710,28 @@ function dedupeNotes(notes: ModerationNoteView[]): ModerationNoteView[] {
     return true;
   });
 }
+
+/**
+ * Capacidades genéricas, usadas só quando não há provedor algum.
+ *
+ * A estimativa precisa compilar o prompt para mostrar o resumo, e compilar exige saber o que
+ * o destinatário aceita. Sem chave cadastrada não há destinatário — então o compilador recebe
+ * um perfil conservador, e o `canGenerate` já diz que gerar não é possível.
+ */
+const FALLBACK_CAPABILITIES: ProviderCapabilities = {
+  textToImage: true,
+  imageToImage: false,
+  maskedEdit: false,
+  multipleReferences: false,
+  transparentBackground: false,
+  seed: false,
+  negativePrompt: false,
+  partialStreaming: false,
+  supportedAspectRatios: ['1:1'],
+  supportedFormats: ['png'],
+  maxReferenceImages: 0,
+  maxOutputs: 1,
+};
 
 /** Traduz a cena para a pergunta que o roteador responde. */
 function routingFor(

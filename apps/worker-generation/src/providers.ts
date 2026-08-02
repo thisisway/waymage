@@ -2,26 +2,59 @@ import {
   ModelRouter,
   ProviderError,
   PROVIDER_QUALITY,
-  createProviderRegistry,
+  createWorkspaceRegistry,
   type ImageProvider,
+  type ProviderRegistry,
   type RoutingContext,
   type RoutingRequest,
 } from '@waymage/provider-sdk';
+import { openSecret } from '@waymage/domain';
 import type { PrismaClient } from '@waymage/database';
 import { env } from './config/env';
 
 /**
- * Provedores disponíveis neste worker.
+ * Provedores disponíveis para UM job.
  *
- * A lista vem de `@waymage/provider-sdk` para ser a mesma que a API usa ao estimar — uma
- * estimativa feita sobre outro conjunto de provedores nao seria estimativa de nada.
- * Adapters reais entram lá, e apenas lá: o resto do worker fala com `ImageProvider`.
+ * Deixou de ser um registro do processo quando a chave passou a ser do usuário (D-070): dois
+ * workspaces têm contas diferentes no mesmo fornecedor, e um registro compartilhado geraria
+ * a imagem de um na fatura do outro.
+ *
+ * A chave é decifrada aqui, usada, e não sobrevive ao job — não entra em log, em `ProviderRun`
+ * nem em mensagem de erro.
  */
-export const providerRegistry = createProviderRegistry({
-  latencyMs: env.FAKE_PROVIDER_LATENCY_MS,
-});
+export async function registryFor(
+  prisma: PrismaClient,
+  workspaceId: string,
+): Promise<ProviderRegistry> {
+  const rows = await prisma.providerCredential.findMany({
+    where: { workspaceId, revokedAt: null },
+    select: { provider: true, secretSealed: true },
+  });
 
-export const modelRouter = new ModelRouter(providerRegistry);
+  const credentials = rows.map((row) => ({
+    provider: row.provider,
+    secret: openSecret(row.secretSealed, env.CREDENTIALS_ENCRYPTION_KEY),
+  }));
+
+  return createWorkspaceRegistry({
+    credentials,
+    // Fora de produção os fakes ficam disponíveis, para o desenvolvimento não exigir chave.
+    includeFakes: env.NODE_ENV !== 'production',
+    fakeLatencyMs: env.FAKE_PROVIDER_LATENCY_MS,
+  });
+}
+
+/** Marca a credencial como usada. Ajuda a identificar chave esquecida meses depois. */
+export async function markCredentialUsed(
+  prisma: PrismaClient,
+  workspaceId: string,
+  provider: string,
+): Promise<void> {
+  await prisma.providerCredential.updateMany({
+    where: { workspaceId, provider, revokedAt: null },
+    data: { lastUsedAt: new Date() },
+  });
+}
 
 /** Janela da taxa de sucesso recente. Curta o bastante para reagir a uma queda em curso. */
 const RELIABILITY_WINDOW_MS = 60 * 60 * 1000;
@@ -73,13 +106,22 @@ export function routingContext(reliability: Record<string, number>): RoutingCont
  * pelas costas — a comparacao entre dois fornecedores deixaria de valer.
  */
 export async function resolveCandidates(
+  registry: ProviderRegistry,
   strategy: string,
   request: RoutingRequest,
   context: RoutingContext,
 ): Promise<ImageProvider[]> {
-  if (strategy && strategy !== 'auto') return [providerRegistry.get(strategy)];
+  if (registry.ids().length === 0) {
+    throw new ProviderError(
+      'invalid_request',
+      'NO_PROVIDER_CREDENTIAL',
+      'Nenhuma chave de IA cadastrada neste workspace. Cadastre uma em Chaves de IA para gerar.',
+    );
+  }
 
-  const ranked = await modelRouter.rank(request, context);
+  if (strategy && strategy !== 'auto') return [registry.get(strategy)];
+
+  const ranked = await new ModelRouter(registry).rank(request, context);
   const eligible = ranked.filter((entry) => entry.eligible);
 
   if (eligible.length === 0) {
@@ -91,5 +133,5 @@ export async function resolveCandidates(
     );
   }
 
-  return eligible.map((entry) => providerRegistry.get(entry.provider));
+  return eligible.map((entry) => registry.get(entry.provider));
 }

@@ -354,6 +354,7 @@ errado, o browser bloqueia todo request e o console mostra erro de CORS.
 NODE_ENV=production
 DATABASE_URL=<mesma da api>
 REDIS_URL=<mesma da api>
+CREDENTIALS_ENCRYPTION_KEY=<a MESMA da api>
 LOG_LEVEL=info
 S3_ENDPOINT=https://<ID-DA-CONTA>.r2.cloudflarestorage.com
 S3_REGION=auto
@@ -365,6 +366,10 @@ S3_FORCE_PATH_STYLE=true
 
 **Não** defina `JWT_ACCESS_SECRET`, `APP_URL` nem `COOKIE_SAMESITE` aqui — o worker não atende
 HTTP, não tem sessão e não precisa de nenhum deles.
+
+`CREDENTIALS_ENCRYPTION_KEY` precisa ser **idêntica** à da API: é ela que cifrou as chaves dos
+usuários, e é o worker que as decifra na hora de gerar. Valores diferentes fazem toda geração
+falhar ao abrir a credencial.
 
 **Sem domínio e sem health check HTTP.** É um processo de fila; o EasyPanel vai reiniciá-lo em
 loop se esperar uma porta que nunca abre.

@@ -1421,6 +1421,48 @@ continua existindo para o projeto que cresce.
 
 ---
 
+## D-075 — Adapter do Google Gemini, e o registro deixa de ser do processo
+
+**Status:** aceita (fecha a Fase 9)
+
+O adapter fala com a **Interactions API** (`POST /v1beta/interactions`), verificada na
+documentacao antes de escrever — o formato que eu escreveria de memoria (`generateContent`)
+esta desatualizado. As dez proporcoes que ela aceita coincidem com as do `SceneSpec`.
+
+**A API e sincrona; o nosso contrato nao.** O adapter dispara a promessa em `generate()` e a
+resolve em `getStatus()`. Nao e firula: `runProviderJob` impoe o proprio limite de tempo, e se
+`generate()` esperasse a resposta esse limite nao teria efeito — um fornecedor travado
+seguraria o worker pelo tempo que quisesse.
+
+**Uma imagem por chamada.** Quatro saidas sao quatro requisicoes, e cada uma e uma cobranca na
+conta do usuario. Por isso `maxOutputs` e 4: um pedido distraido de dezesseis viraria dezesseis
+chamadas pagas.
+
+**O registro passou a ser por workspace**, na API e no worker. Com a chave do usuario, dois
+workspaces tem contas diferentes no mesmo fornecedor — um registro compartilhado geraria a
+imagem de um na fatura do outro. Os fakes so entram fora de producao, para `pnpm dev` funcionar
+sem chave de ninguem.
+
+Isso corrigiu de passagem uma incoerencia que a [D-057](#d-057) previa: a API estimava sobre os
+fakes do processo enquanto o worker executaria com a chave do workspace. A estimativa mostraria
+um provedor e a geracao usaria outro.
+
+**Custo e relativo, nao preco.** `estimateCost` devolve `externalCostCents: 0` de proposito:
+nao sabemos o preco, ele muda sem aviso, e exibir uma previsao de fatura inventada e pior do que
+nao exibir nenhuma. O numero em `credits` existe so para o roteador ordenar candidatos.
+
+**Verificacao.** O adapter passa pela mesma suite de contrato dos fakes, com `fetch` de mentira
+— o que envia, o que le da resposta, e como classifica cada falha. `401` vira `auth`, que nao
+tenta de novo nem troca de provedor: insistir com chave invalida so gasta o tempo de quem ja
+tem um problema para resolver na conta dele. `200` sem imagem vira `content_policy`, porque e
+assim que o fornecedor devolve uma recusa.
+
+**O que NAO foi verificado:** a chamada real. Um teste que precisa de chave paga nao roda em
+CI, e cobrar do usuario a cada commit seria o pior arranjo possivel. A primeira chamada de
+verdade e manual.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

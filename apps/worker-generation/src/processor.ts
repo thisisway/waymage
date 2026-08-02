@@ -31,7 +31,13 @@ import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
 import { recordUsage } from './usage';
 import { isBlocking, moderateImage, moderateText, recordDecision } from './moderation';
-import { recentReliability, resolveCandidates, routingContext } from './providers';
+import {
+  markCredentialUsed,
+  recentReliability,
+  registryFor,
+  resolveCandidates,
+  routingContext,
+} from './providers';
 import { runProviderJob } from './run-provider-job';
 
 /**
@@ -138,7 +144,9 @@ export async function processGenerationJob(
     } as const;
 
     const context = routingContext(await recentReliability(prisma));
-    const candidates = await resolveCandidates(record.providerStrategy, routing, context);
+    // Registro montado com as credenciais DESTE workspace: a chave é de quem pediu.
+    const registry = await registryFor(prisma, payload.workspaceId);
+    const candidates = await resolveCandidates(registry, record.providerStrategy, routing, context);
 
     await advance('VALIDATING', 'MODERATING_INPUT');
 
@@ -497,6 +505,8 @@ export async function processGenerationJob(
       where: { id: record.id },
       data: { completedAt: new Date() },
     });
+
+    await markCredentialUsed(prisma, payload.workspaceId, provider.id);
 
     log.info({ count: stored.length, provider: provider.id }, 'Geração concluída');
     return { resultIds: stored.map((result) => result.id) };

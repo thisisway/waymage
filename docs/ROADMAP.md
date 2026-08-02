@@ -193,7 +193,8 @@ nenhuma URL assinada.
 - [x] Fallback automático, com reserva complementada só quando a troca ocorre (D-058)
 - [x] Suíte de contrato rodando contra dois perfis (D-061)
 - [x] Painel de execução: tentativas visíveis quando houve troca de provedor
-- [ ] **Pendente:** dois adapters reais atrás de `ImageProvider`
+- [x] Adapter real do Google Gemini, com a chave do usuário (D-070, D-075)
+- [ ] **Pendente:** um segundo fornecedor real, quando houver demanda
 
 **O que falta é a única parte que exige chave de API real — e portanto autorização.** Até lá,
 dois perfis fake (`fake-rapido` e `fake-estudio`) diferem em custo, latência, teto de saídas e

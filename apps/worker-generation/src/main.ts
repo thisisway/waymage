@@ -9,7 +9,6 @@ import { processExportJob } from './export-processor';
 import { env } from './config/env';
 import { EventPublisher } from './events';
 import { processGenerationJob } from './processor';
-import { providerRegistry } from './providers';
 
 const logger = pino({ level: env.LOG_LEVEL, base: { service: 'worker-generation' } });
 
@@ -71,7 +70,9 @@ generationWorker.on('ready', () => {
     {
       queues: [QUEUE_GENERATION, QUEUE_ASSETS, QUEUE_EXPORTS],
       concurrency: { generation: env.WORKER_CONCURRENCY, assets: env.ASSET_CONCURRENCY },
-      providers: providerRegistry.ids(),
+      // Os provedores não são mais do processo: cada job monta os seus a partir das
+      // credenciais do workspace. O que dá para reportar aqui é o modo.
+      byok: env.NODE_ENV === 'production' ? 'somente chaves do usuário' : 'fakes + chaves',
     },
     'Worker pronto',
   );
