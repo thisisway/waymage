@@ -1,7 +1,9 @@
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -139,6 +141,53 @@ export class StorageService {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  /**
+   * Apaga tudo sob um prefixo.
+   *
+   * Existe para a exclusão de conta: as chaves seguem `workspaces/<id>/…` desde a Fase 1, e
+   * varrer o prefixo é o único jeito de garantir que nada sobrou. Derivar as chaves a partir
+   * das linhas do banco deixaria de fora tudo o que é derivado — miniatura, exportação,
+   * máscara convertida, base contornada —, e "quase apagado" não é apagado.
+   *
+   * Devolve quantos objetos removeu, para o registro da exclusão dizer o tamanho do que foi.
+   *
+   * ponytail: percorre as páginas em sequência, mil objetos por vez, que é o teto da API.
+   * Workspace grande demora; a exclusão acontece uma vez, e fazer disso um job de fila
+   * acrescentaria uma máquina de estados para um caso que ainda não existe.
+   */
+  async deletePrefix(prefix: string): Promise<number> {
+    let removed = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const listed = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+        }),
+      );
+
+      const keys = (listed.Contents ?? [])
+        .map((object) => object.Key)
+        .filter((key): key is string => Boolean(key));
+
+      if (keys.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        removed += keys.length;
+      }
+
+      continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return removed;
   }
 
   destroy(): void {

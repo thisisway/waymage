@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccountModule } from './account/account.module';
 import { AssetsModule } from './assets/assets.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { AuditModule } from './audit/audit.module';
@@ -26,6 +27,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     WorkspacesModule,
     ProjectsModule,
     ScenesModule,
+    AccountModule,
     AssetsModule,
     CredentialsModule,
     GenerationsModule,

@@ -1708,6 +1708,39 @@ a imagem que o modelo vai editar, sem nenhuma pergunta que ela responda.
 
 ---
 
+## D-085 — Excluir a conta apaga de verdade
+
+**Status:** aceita (Fase 10)
+
+O produto guarda duas coisas que nao sao nossas: **imagens que podem ser de pessoas reais** e
+**chaves de API de terceiros**. Manter isso depois de alguem pedir para sair nao e descuido de
+produto — e reter dado sem base para reter.
+
+**Nada de `deletedAt`.** O apagado logico serve para desfazer um clique errado, e e exatamente
+o que nao pode acontecer com um pedido de exclusao. Saem as linhas e saem os bytes.
+
+**Os bytes primeiro, as linhas depois.** Na ordem inversa, uma falha no storage deixaria
+arquivos orfaos sem nenhuma linha apontando para eles — invisiveis, e por isso permanentes.
+Falhando nesta ordem, a conta continua existindo e o pedido pode ser repetido.
+
+**Varre o prefixo, nao as linhas.** As chaves seguem `workspaces/<id>/…` desde a Fase 1.
+Derivar o que apagar a partir do banco deixaria de fora tudo o que e derivado — miniatura,
+exportacao, mascara convertida, base contornada —, e "quase apagado" nao e apagado.
+
+**Exige a senha, mesmo com sessao valida.** Uma sessao aberta num computador emprestado nao
+deveria bastar para destruir o trabalho de alguem.
+
+**So o dono.** Um `ADMIN` convidado administra o workspace; encerra-lo e decisao de quem o
+criou. E o usuario so e removido se nao pertencer a mais nenhum workspace.
+
+**O registro da exclusao fica no log, nao numa tabela.** Uma tabela de auditoria que guarda
+quem pediu para ser esquecido faz o oposto do que deveria.
+
+**O que falta da retencao:** expiracao automatica de conteudo antigo e do que o usuario nao
+apagou. Isto cobre o pedido explicito, que e o caso com peso legal.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

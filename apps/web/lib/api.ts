@@ -539,6 +539,10 @@ export const api = {
       body: { secret },
     }),
 
+  /** Apaga a conta e tudo nela. Exige a senha: sessão aberta não basta. */
+  deleteAccount: (password: string) =>
+    apiFetch<void>('/account', { method: 'DELETE', body: { password } }),
+
   revokeCredential: (provider: string) =>
     apiFetch<void>(`/provider-credentials/${provider}`, { method: 'DELETE' }),
 

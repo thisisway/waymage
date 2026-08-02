@@ -223,7 +223,8 @@ reserva de 1 para 3 e cobra 3 — carteira 100 → 97, nada preso em reserva.
 - [x] Barrado por nós devolve o crédito; barrado pelo fornecedor não (D-063)
 - [x] Ressalvas visíveis na tela junto do resultado
 - [ ] **Pendente:** `ConsentRecord` para pessoas reais, com revogação
-- [ ] **Pendente:** política de retenção e exclusão
+- [x] Exclusão de conta a pedido do titular, apagando bytes e linhas (D-085)
+- [ ] **Pendente:** expiração automática de conteúdo antigo
 - [ ] **Pendente:** painel administrativo — sem ele, `REVIEW_REQUIRED` falha o job em vez de
       entrar numa fila, porque não existe quem revise
 

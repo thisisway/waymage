@@ -84,6 +84,8 @@ export default function SettingsPage() {
           />
         ))}
 
+        <DangerZone />
+
         <p className="flex gap-2.5 rounded-lg border border-surface-border px-4 py-3 text-micro leading-relaxed text-ink-muted">
           <Icon name="lock" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
@@ -248,5 +250,90 @@ function SmallButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Exclusão de conta.
+ *
+ * Fica atrás de dois passos deliberados — abrir e digitar a senha — porque é irreversível e
+ * não tem lixeira. Um botão direto aqui seria um clique de distância de destruir o trabalho
+ * de alguém.
+ */
+function DangerZone() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+
+  const remove = useMutation({
+    mutationFn: () => api.deleteAccount(password),
+    onSuccess: () => {
+      queryClient.clear();
+      router.replace('/register');
+    },
+    onError: (caught) =>
+      toast.error(caught instanceof ApiError ? caught.message : 'Não foi possível excluir.'),
+  });
+
+  return (
+    <section className="rounded-lg border border-state-error/25 bg-state-error/[0.04] p-4">
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink-primary">
+        <Icon name="trash" className="h-4 w-4 text-state-error" />
+        Excluir conta
+      </h2>
+
+      <p className="mt-1.5 text-micro leading-relaxed text-ink-muted">
+        Apaga o workspace, os projetos, as imagens geradas e as chaves cadastradas. Os arquivos saem
+        do storage de verdade — não há lixeira, e não há como desfazer.
+      </p>
+
+      {open ? (
+        <div className="mt-3 space-y-2">
+          <label className="block">
+            <span className="mb-1.5 block text-label uppercase text-ink-muted">
+              Confirme sua senha
+            </span>
+            <input
+              type="password"
+              value={password}
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-md border border-surface-border bg-surface-overlay px-3 py-2.5 text-[13px] text-ink-primary outline-none transition-all duration-fast ease-out focus:border-state-error focus:ring-2 focus:ring-state-error/25"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => remove.mutate()}
+              disabled={password.length === 0 || remove.isPending}
+            >
+              {remove.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Icon name="trash" />}
+              Excluir definitivamente
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setPassword('');
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-3 rounded-md border border-state-error/40 px-3 py-1.5 text-micro font-semibold text-state-error transition-all duration-fast ease-out hover:bg-state-error/10 active:scale-[0.96]"
+        >
+          Quero excluir minha conta
+        </button>
+      )}
+    </section>
   );
 }
