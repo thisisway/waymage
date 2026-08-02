@@ -26,6 +26,7 @@ import { parseSceneSpec, type SceneSpec } from '@waymage/scene-spec';
 import { SIGNED_URL_TTL, type StorageService, storageKeys } from '@waymage/storage';
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
+import sharp from 'sharp';
 import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
@@ -623,6 +624,26 @@ async function storeImages(
 
   for (const [index, image] of images.entries()) {
     const extension = image.mimeType.split('/')[1] ?? 'png';
+
+    /**
+     * Dimensões medidas aqui quando o provedor não as informa.
+     *
+     * O adapter do Google lê largura e altura do cabeçalho do PNG — treze bytes, sem
+     * dependência de decodificação. Para JPEG ele devolve zero, e zero contamina tudo o que
+     * vem depois: a legenda mostraria "0×0" e a avaliação de aderência compararia a proporção
+     * pedida contra uma imagem sem tamanho.
+     *
+     * O worker já carrega o `sharp` para gerar miniatura, então medir aqui não custa
+     * dependência nova — e mantém o pacote de provedores livre de binário nativo.
+     */
+    const measured =
+      image.width > 0 && image.height > 0
+        ? { width: image.width, height: image.height }
+        : await sharp(image.data)
+            .metadata()
+            .then((meta) => ({ width: meta.width ?? 0, height: meta.height ?? 0 }))
+            .catch(() => ({ width: 0, height: 0 }));
+
     const key = storageKeys.generationResult(
       ctx.workspaceId,
       ctx.projectId,
@@ -643,8 +664,8 @@ async function storeImages(
         storageKey: key,
         mimeType: image.mimeType,
         sizeBytes: image.data.length,
-        width: image.width,
-        height: image.height,
+        width: measured.width,
+        height: measured.height,
       },
       select: { id: true },
     });
@@ -655,15 +676,20 @@ async function storeImages(
         generationJobId: ctx.jobId,
         providerRunId: ctx.providerRunId,
         assetId: asset.id,
-        width: image.width,
-        height: image.height,
+        width: measured.width,
+        height: measured.height,
         format: extension,
         seed: image.seed === undefined ? null : BigInt(image.seed),
       },
       select: { id: true },
     });
 
-    results.push({ id: result.id, assetId: asset.id, width: image.width, height: image.height });
+    results.push({
+      id: result.id,
+      assetId: asset.id,
+      width: measured.width,
+      height: measured.height,
+    });
   }
 
   return results;
