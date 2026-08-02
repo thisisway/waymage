@@ -98,6 +98,13 @@ export default function ProjectsPage() {
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface-base/95 px-6 py-3 backdrop-blur">
         <span className="text-h3 text-ink-primary">Waymage</span>
         <div className="flex items-center gap-5 text-micro">
+          <a
+            href="/settings"
+            className="flex items-center gap-1.5 font-semibold text-ink-secondary transition-colors hover:text-ink-primary"
+          >
+            <Icon name="key" className="h-3.5 w-3.5" />
+            chaves de IA
+          </a>
           <span className="text-ink-muted">{session.data.user.email}</span>
           <button
             type="button"

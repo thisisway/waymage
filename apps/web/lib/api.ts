@@ -350,6 +350,22 @@ export interface GenerationJob {
   results: GenerationResult[];
 }
 
+export interface CredentialProvider {
+  id: string;
+  label: string;
+  /** Onde a pessoa obtém a chave. Vai ao lado do campo. */
+  helpUrl: string;
+  keyPrefix?: string;
+}
+
+export interface ProviderCredential {
+  provider: string;
+  /** Últimos quatro caracteres. É tudo o que o servidor devolve — o valor nunca volta. */
+  hint: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 export interface ProviderAlternative {
   provider: string;
   eligible: boolean;
@@ -481,6 +497,21 @@ export const api = {
       headers: { 'idempotency-key': idempotencyKey },
     }),
 
+  /** Provedores que aceitam chave do usuário. Público: é informação de produto. */
+  providerCatalog: () => apiFetch<CredentialProvider[]>('/provider-catalog'),
+
+  credentials: () => apiFetch<ProviderCredential[]>('/provider-credentials'),
+
+  /** O valor sobe uma vez e nunca mais desce: a resposta traz só a dica. */
+  saveCredential: (provider: string, secret: string) =>
+    apiFetch<ProviderCredential>(`/provider-credentials/${provider}`, {
+      method: 'PUT',
+      body: { secret },
+    }),
+
+  revokeCredential: (provider: string) =>
+    apiFetch<void>(`/provider-credentials/${provider}`, { method: 'DELETE' }),
+
   createExport: (resultIds: string[], format: 'png' | 'jpeg' | 'webp') =>
     apiFetch<ExportJob>('/exports', { method: 'POST', body: { resultIds, format } }),
 
@@ -565,4 +596,6 @@ export const queryKeys = {
   generation: (jobId: string) => ['generation-jobs', jobId] as const,
   estimate: (sceneId: string) => ['scenes', sceneId, 'estimate'] as const,
   export: (exportId: string) => ['exports', exportId] as const,
+  providerCatalog: ['provider-catalog'] as const,
+  credentials: ['provider-credentials'] as const,
 };
