@@ -13,6 +13,15 @@
  * derruba o autosave da cena e a exclusão de referência — sem aparecer em nenhum teste que
  * não passe por um preflight.
  *
+ * **Todos os métodos padrão, e não só os que a aplicação usa hoje.** A primeira versão desta
+ * lista enumerava o que existia no momento, e quebrou assim que uma rota `PUT` nasceu: o
+ * cadastro de chave falhava no preflight, com uma mensagem genérica que não apontava para
+ * aqui.
+ *
+ * Liberar um método não cria rota nenhuma — o que não existe continua respondendo 404. Quem
+ * autoriza é o guard, não esta lista; acoplá-la ao conjunto de rotas só criava uma segunda
+ * coisa para manter em sincronia.
+ *
  * Cabeçalhos ficam de fora de propósito: sem `allowedHeaders`, o plugin reflete os que o
  * preflight pediu, o que já cobre `content-type`, `x-csrf-token` e `idempotency-key` sem
  * precisar mantê-los em duas listas.
@@ -24,6 +33,6 @@ export function corsOptions(origin: string) {
   return {
     origin,
     credentials: true,
-    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'],
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
   };
 }

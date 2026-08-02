@@ -71,10 +71,12 @@ describe('CORS', () => {
     });
   }
 
-  it('permite os métodos que a aplicação usa', async () => {
-    // `PATCH` é o autosave da cena e `DELETE` é a exclusão de referência. O padrão do
-    // @fastify/cors — `GET,HEAD,POST` — deixaria os dois de fora.
-    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+  it('permite todos os métodos padrão, não só os de hoje', async () => {
+    // `PATCH` é o autosave e `DELETE` é a exclusão de referência — o padrão do @fastify/cors
+    // deixaria os dois de fora. `PUT` entrou na lista depois, com o cadastro de chave, e a
+    // falta dele quebrou em produção: por isso a asserção cobre o conjunto inteiro, e não o
+    // que a aplicação usa no momento em que este teste foi escrito.
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
       const allowed = (await preflight(method)).headers['access-control-allow-methods'];
       expect(String(allowed), method).toContain(method);
     }

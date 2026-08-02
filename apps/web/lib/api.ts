@@ -146,6 +146,14 @@ export async function apiFetch<T>(
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   if (mutation) headers[CSRF_HEADER] = csrfToken();
 
+  /**
+   * `fetch` rejeitar é diferente de a API responder com erro.
+   *
+   * Rejeição significa que a requisição não chegou: origem bloqueada pelo CORS, método não
+   * liberado no preflight, API fora do ar. Deixar isso virar um erro genérico faz cada
+   * ocorrência custar uma investigação — já custou duas nesta base, uma no upload ao storage
+   * e outra no cadastro de chave.
+   */
   const response = await fetch(`${apiUrl()}${path}`, {
     method,
     headers,
@@ -153,6 +161,15 @@ export async function apiFetch<T>(
     cache: 'no-store',
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     ...(options.signal ? { signal: options.signal } : {}),
+  }).catch((caught: unknown) => {
+    // AbortError é cancelamento nosso, não falha: propaga como está para quem cancelou.
+    if (caught instanceof DOMException && caught.name === 'AbortError') throw caught;
+
+    throw new ApiError(
+      'NETWORK_UNREACHABLE',
+      `A API não respondeu (${method} ${path}). Pode ser bloqueio de CORS, método não liberado no preflight, ou a API fora do ar.`,
+      0,
+    );
   });
 
   if (response.status === 204) return undefined as T;

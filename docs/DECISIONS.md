@@ -1279,6 +1279,18 @@ correcao e removida.
 Cabecalhos continuam sem `allowedHeaders`: o plugin reflete os que o preflight pediu, o que
 cobre `content-type`, `x-csrf-token` e `idempotency-key` sem manter a lista em dois lugares.
 
+**Correcao seguinte, mesmo defeito.** A lista enumerava os metodos que a aplicacao usava
+NAQUELE momento, e quebrou assim que uma rota `PUT` nasceu — o cadastro de chave falhava no
+preflight, com uma mensagem generica que nao apontava para aqui.
+
+Agora sao todos os metodos padrao. Liberar um metodo nao cria rota nenhuma: o que nao existe
+continua respondendo 404, e quem autoriza e o guard. Acoplar esta lista ao conjunto de rotas
+so criava uma segunda coisa para manter em sincronia — e o custo do desencontro caia no
+usuario, nao no build.
+
+E a terceira vez que uma lista escrita a mao espelhando outra parte do sistema quebra nesta
+base: os `COPY` por pacote no Dockerfile ([D-067](#d-067)) foram as duas primeiras.
+
 ---
 
 ## D-070 — A chave do provedor e do usuario (BYOK), e creditos deixam de existir
@@ -1460,6 +1472,23 @@ assim que o fornecedor devolve uma recusa.
 **O que NAO foi verificado:** a chamada real. Um teste que precisa de chave paga nao roda em
 CI, e cobrar do usuario a cada commit seria o pior arranjo possivel. A primeira chamada de
 verdade e manual.
+
+---
+
+## D-076 — Falha de rede nao pode soar como erro de aplicacao
+
+**Status:** aceita
+
+`fetch` rejeitar e a API responder com erro sao diagnosticos opostos, e o cliente tratava os
+dois como "nao foi possivel". Rejeicao significa que a requisicao **nao chegou**: origem
+bloqueada pelo CORS, metodo fora do preflight, API fora do ar.
+
+Custou duas investigacoes nesta base — o upload ao storage e o cadastro de chave —, nas duas
+com a mesma frase inutil na tela. Agora `apiFetch` distingue: rejeicao vira
+`NETWORK_UNREACHABLE`, com o metodo, o caminho e as tres causas provaveis na mensagem.
+
+`AbortError` e reproduzido como esta: cancelamento nosso nao e falha, e transforma-lo em erro
+faria um `signal` disparado durante a digitacao virar um aviso vermelho.
 
 ---
 
