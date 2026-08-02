@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { QueryProvider } from '../components/query-provider';
@@ -56,12 +57,16 @@ function runtimeConfig(): string {
   return `window.__WAYMAGE_API_URL__=${JSON.stringify(url).replace(/</g, '\\u003c')}`;
 }
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // O nonce vem do middleware, que também escreveu a CSP desta resposta. Sem ele a tag abaixo
+  // é bloqueada pelo browser — e o app sai apontando para `localhost`.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="pt-BR" className={jakarta.variable}>
       <head>
         {/* Antes de qualquer bundle: quando o código do cliente rodar, o valor já existe. */}
-        <script dangerouslySetInnerHTML={{ __html: runtimeConfig() }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: runtimeConfig() }} />
       </head>
       <body className="min-h-screen font-sans">
         <QueryProvider>

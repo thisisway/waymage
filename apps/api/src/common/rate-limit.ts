@@ -4,9 +4,13 @@ import type { Redis } from 'ioredis';
 /**
  * Rate limit dos endpoints de autenticação.
  *
- * Só `/auth/*` por enquanto: é onde força bruta e enumeração de e-mail doem, e onde o custo
- * de cada request é alto (scrypt roda de propósito devagar). Limite de geração por workspace
- * entra na Fase 6, junto com os créditos, porque lá o eixo é dinheiro e não IP.
+ * `/auth/*` cobre força bruta e enumeração de e-mail, onde cada request custa caro porque o
+ * scrypt roda devagar de propósito.
+ *
+ * As outras regras cobrem o que gasta **recurso nosso**: cada URL de upload assinada permite
+ * escrever no nosso bucket, e cada geração ocupa um worker. Não é sobre dinheiro do usuário —
+ * a chave do fornecedor é dele (D-070) —, é sobre um visitante conseguir encher o storage ou
+ * a fila de quem hospeda.
  *
  * Contador no Redis, não em memória: com mais de uma instância de API, um limite por processo
  * multiplica o teto real pelo número de réplicas.
@@ -17,6 +21,14 @@ import type { Redis } from 'ioredis';
 export interface RateLimitRule {
   /** Prefixo da rota, comparado com `startsWith`. */
   prefix: string;
+  /**
+   * Método, quando a regra vale só para ele.
+   *
+   * Sem isto, um limite em `/generation-jobs` atingiria também o `GET` que a tela usa para
+   * acompanhar o progresso — a consulta roda a cada três segundos, e o teto pensado para
+   * criações derrubaria o acompanhamento de uma geração normal.
+   */
+  method?: string;
   max: number;
   windowSeconds: number;
 }
@@ -25,6 +37,13 @@ export const AUTH_RATE_LIMITS: RateLimitRule[] = [
   { prefix: '/auth/login', max: 10, windowSeconds: 300 },
   { prefix: '/auth/register', max: 5, windowSeconds: 3600 },
   { prefix: '/auth/refresh', max: 60, windowSeconds: 300 },
+
+  // Cada URL assinada é permissão de escrita no nosso bucket. Sem teto, um visitante enche o
+  // storage de quem hospeda sem nunca completar um upload.
+  { prefix: '/assets/upload-url', method: 'POST', max: 120, windowSeconds: 300 },
+
+  // Criar geração ocupa um worker. `POST` apenas: o `GET` do mesmo prefixo é o acompanhamento.
+  { prefix: '/generation-jobs', method: 'POST', max: 60, windowSeconds: 300 },
 ];
 
 export function registerRateLimit(
@@ -33,11 +52,14 @@ export function registerRateLimit(
   rules: RateLimitRule[] = AUTH_RATE_LIMITS,
 ): void {
   app.addHook('onRequest', async (request, reply) => {
-    const rule = rules.find((r) => request.url.startsWith(r.prefix));
+    const rule = rules.find(
+      (r) => request.url.startsWith(r.prefix) && (!r.method || r.method === request.method),
+    );
     if (!rule) return;
 
     const window = Math.floor(Date.now() / 1000 / rule.windowSeconds);
-    const key = `ratelimit:${rule.prefix}:${request.ip}:${window}`;
+    // O método entra na chave: duas regras no mesmo prefixo não podem dividir o contador.
+    const key = `ratelimit:${rule.method ?? 'ANY'}:${rule.prefix}:${request.ip}:${window}`;
 
     let count: number;
     try {

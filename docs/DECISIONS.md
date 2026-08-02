@@ -1624,6 +1624,49 @@ convidados.
 
 ---
 
+## D-081 — CSP por nonce, nao por `unsafe-inline`
+
+**Status:** aceita (Fase 11)
+
+Os cookies de sessao sao `httpOnly`, entao um XSS nao os le. Mas ele ainda age em nome do
+usuario enquanto a pagina esta aberta — gera imagem, apaga projeto, troca a chave de API. A CSP
+e a defesa que sobra depois que o XSS acontece.
+
+`script-src 'unsafe-inline'` nao protege de nada: e exatamente o ataque que a politica deveria
+barrar. O nonce e sorteado por resposta no middleware, entra no cabecalho e na tag de
+configuracao que o layout injeta, e o Next o aplica sozinho aos scripts dele. `strict-dynamic`
+permite que um script autorizado carregue os seus, que e como o Next monta a pagina.
+
+Isso exige renderizacao por requisicao — que este app ja faz desde a [D-068](#d-068), pela
+leitura da URL da API em runtime. As duas decisoes se pagaram juntas.
+
+**`connect-src` le a API do ambiente**, pelo mesmo motivo: politica fixa bloquearia toda chamada
+no dia em que o dominio mudasse.
+
+**Concessoes conscientes.** `style-src 'unsafe-inline'` fica: o Next e o `next/font` injetam
+`<style>` sem nonce, e CSS nao executa codigo. `img-src https:` tambem: o host das URLs
+assinadas varia com a conta de storage, e imagem e vetor de risco muito menor que script.
+
+---
+
+## D-082 — Rate limit por metodo, nao so por prefixo
+
+**Status:** aceita (Fase 11)
+
+Os limites passaram a cobrir o que gasta **recurso de quem hospeda**: cada URL de upload
+assinada e permissao de escrita no nosso bucket, e cada geracao ocupa um worker. Nao e sobre
+dinheiro do usuario — a chave do fornecedor e dele.
+
+O metodo entrou na regra por necessidade. Um limite em `/generation-jobs` sem metodo atingiria
+tambem o `GET` que a tela usa para acompanhar o progresso, que roda a cada tres segundos desde
+a [D-077](#d-077): o teto pensado para criacoes derrubaria o acompanhamento de uma geracao
+normal, e o sintoma seria "a barra travou" — o mesmo defeito que aquela consulta veio resolver.
+
+Ha teste para exatamente isso, porque a interacao entre as duas decisoes nao e visivel lendo
+nenhuma das duas sozinha.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

@@ -235,7 +235,7 @@ conclusão com aviso na tela e cobrança, e conclusão silenciosa. Só as três 
 
 ---
 
-## ⬜ Fase 11 — Hardening
+## 🔜 Fase 11 — Hardening
 
 - [ ] Playwright ponta a ponta com FakeImageProvider
 - [ ] Rate limiting, CSP, headers de segurança
