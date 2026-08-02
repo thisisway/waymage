@@ -375,6 +375,8 @@ export interface ProviderAlternative {
 }
 
 export interface Estimate {
+  /** Sem chave de IA cadastrada não há como gerar — e a saída é outra tela. */
+  needsCredential: boolean;
   provider: string;
   estimatedSeconds: number;
   count: number;

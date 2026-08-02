@@ -16,8 +16,45 @@ export function GenerationSummary({ sceneId }: { sceneId: string }) {
   });
 
   if (!estimate.data) return null;
-  const { count, estimatedSeconds, provider, summary, warnings, canGenerate, alternatives } =
-    estimate.data;
+  const {
+    count,
+    estimatedSeconds,
+    provider,
+    summary,
+    warnings,
+    canGenerate,
+    alternatives,
+    needsCredential,
+  } = estimate.data;
+
+  /**
+   * Falta de chave tem tela própria.
+   *
+   * Cai antes do resumo porque não há o que resumir: sem provedor, tempo e contagem são
+   * números sobre uma geração que não vai acontecer.
+   */
+  if (needsCredential) {
+    return (
+      <div className="animate-rise mx-auto w-full max-w-2xl rounded-lg border border-state-warn/30 bg-state-warn/[0.06] p-4">
+        <p className="flex gap-2.5 text-[13px] leading-relaxed text-ink-secondary">
+          <Icon name="key" className="mt-0.5 h-4 w-4 shrink-0 text-state-warn" />
+          <span>
+            <strong className="text-ink-primary">Cadastre uma chave de IA para gerar.</strong> A
+            geração usa a sua chave e é cobrada direto pelo fornecedor — o Waymage não intermedeia
+            esse consumo.
+          </span>
+        </p>
+
+        <a
+          href="/settings"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-micro font-semibold text-white shadow-glow-sm transition-all duration-fast ease-out hover:bg-accent-80"
+        >
+          <Icon name="key" className="h-3.5 w-3.5" />
+          Cadastrar chave
+        </a>
+      </div>
+    );
+  }
 
   // Só o descartado interessa: repetir o escolhido, que já está em destaque acima, seria
   // ocupar espaço para não dizer nada.

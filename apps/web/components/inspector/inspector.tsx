@@ -35,6 +35,8 @@ import {
   Toggle,
 } from '../ui/controls';
 import { PositionPicker } from '../ui/position-picker';
+import { useQuery } from '@tanstack/react-query';
+import { api, queryKeys } from '../../lib/api';
 import { isSectionVisible, useEditorStore, type SectionId } from '../../stores/editor-store';
 import { Icon } from '../ui/icons';
 import { LABELS } from './labels';
@@ -99,6 +101,14 @@ export function Inspector({
   disabled?: boolean;
 }) {
   const mode = useEditorStore((state) => state.mode);
+
+  // Os provedores que existem de verdade, e não uma lista fixa: em produção só há os que
+  // aceitam chave, e oferecer um id inexistente faria a geração falhar no worker.
+  const catalog = useQuery({
+    queryKey: queryKeys.providerCatalog,
+    queryFn: () => api.providerCatalog(),
+  });
+  const providers = catalog.data ?? [];
 
   function patch<K extends keyof SceneSpec>(key: K, value: Partial<SceneSpec[K]>) {
     onChange({ ...spec, [key]: { ...(spec[key] as object), ...value } });
@@ -621,8 +631,7 @@ export function Inspector({
             value={spec.advanced.provider}
             options={[
               { value: 'auto', label: 'Automático' },
-              { value: 'fake-rapido', label: 'Rápido' },
-              { value: 'fake-estudio', label: 'Estúdio' },
+              ...providers.map((entry) => ({ value: entry.id, label: entry.label })),
             ]}
             hint="Automático deixa o roteador pontuar e escolher. Forçar um provedor é útil para comparar a mesma cena entre dois."
             onChange={(v) => patch('advanced', { provider: v })}

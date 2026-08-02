@@ -108,6 +108,14 @@ export interface ProviderAlternative {
 }
 
 export interface EstimateView {
+  /**
+   * O workspace não tem chave de IA cadastrada.
+   *
+   * Separado de `canGenerate` porque a saída é outra: erro de cena se resolve no inspetor,
+   * falta de chave se resolve noutra tela. Misturar os dois faria a mensagem mandar a pessoa
+   * procurar um problema que não existe.
+   */
+  needsCredential: boolean;
   provider: string;
   estimatedSeconds: number;
   count: number;
@@ -225,7 +233,8 @@ export class GenerationsService {
     });
 
     return {
-      provider: chosen?.provider ?? 'nenhum',
+      needsCredential: registry.ids().length === 0,
+      provider: chosen?.provider ?? '—',
       estimatedSeconds: Math.ceil(
         ((chosen?.estimatedLatencyMs ?? 0) * scene.sceneSpec.output.count) / 1000,
       ),

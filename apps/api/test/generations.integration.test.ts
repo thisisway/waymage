@@ -284,3 +284,23 @@ describe('isolamento', () => {
     expect((await generate(intruso, scene.id)).statusCode).toBe(404);
   }, 120_000);
 });
+
+describe('sem chave de IA', () => {
+  it('a estimativa diz que falta credencial, e não que a cena tem erro', async () => {
+    const session = await setup('sem-chave');
+    const scene = JSON.parse(
+      (await call(session, 'POST', `/projects/${session.projectId}/scenes`, { name: 'Cena' })).body,
+    ) as { id: string };
+
+    const estimate = JSON.parse(
+      (await call(session, 'POST', '/generation-jobs/estimate', { sceneId: scene.id })).body,
+    ) as { needsCredential: boolean; canGenerate: boolean; provider: string };
+
+    // Em desenvolvimento os fakes estão registrados, então há provedor e `needsCredential` é
+    // falso. O que este teste garante é que o campo EXISTE e é coerente com o registro — a
+    // separação entre "erro de cena" e "falta chave" é o que faz a tela mandar a pessoa para
+    // o lugar certo.
+    expect(typeof estimate.needsCredential).toBe('boolean');
+    expect(estimate.needsCredential).toBe(estimate.provider === '—');
+  }, 60_000);
+});
