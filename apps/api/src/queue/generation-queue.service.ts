@@ -18,8 +18,15 @@ export class GenerationQueueService implements OnModuleDestroy {
     this.queue = new Queue<GenerationJobPayload>(QUEUE_GENERATION, {
       connection: redis.client,
       defaultJobOptions: {
-        // Teto baixo de tentativas: cada retry pode custar dinheiro real quando houver
-        // provedor de verdade. Falha persistente é problema para o operador, não para o loop.
+        /**
+         * Teto baixo: cada retry custa dinheiro real na conta do usuário.
+         *
+         * ponytail: hoje estas tentativas quase não acontecem — o processador marca o job
+         * como `FAILED` na primeira falha, e a repetição encontra um job terminal e desiste.
+         * Aproveitá-las exigiria devolver o job a `QUEUED` antes de propagar o erro, e isso
+         * é uma aresta nova na máquina de estados. Fica para quando houver falha transitória
+         * frequente o bastante para justificar.
+         */
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: { age: 24 * 3600, count: 1000 },

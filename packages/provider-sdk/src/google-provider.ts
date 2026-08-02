@@ -395,10 +395,17 @@ export class GoogleImageProvider implements ImageProvider {
     }
 
     if (response.status === 429) {
+      /**
+       * 429 quase nunca é rajada, nos modelos de imagem.
+       *
+       * "Tente de novo em instantes" é o que o status HTTP sugere, e estava enganando: no
+       * nível gratuito a cota de imagem é baixa ou inexistente, e nenhuma espera resolve.
+       * A mensagem precisa mandar a pessoa para onde o problema está.
+       */
       return new ProviderError(
         'quota',
         'GOOGLE_RATE_LIMITED',
-        'O Google recusou por limite de uso. Tente de novo em instantes.',
+        `O Google recusou por limite de uso. Costuma ser cota do nível gratuito ou faturamento não habilitado no projeto — confira em aistudio.google.com. Se o faturamento já estiver ativo, é rajada e vale tentar em instantes. ${detail}`,
         this.id,
       );
     }
