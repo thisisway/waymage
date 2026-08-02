@@ -10,6 +10,15 @@ import { ApiError, api, apiUrl, queryKeys, type GenerationProgress } from './api
  * O progresso vem por SSE porque o alternativo — perguntar de segundo em segundo — multiplica
  * consultas ao banco por cada aba aberta e ainda entrega a novidade com atraso. `EventSource`
  * ainda reconecta sozinho se a rede cair, o que um polling manual teria de reimplementar.
+ *
+ * **Mas o SSE não é a única fonte.** Ele atravessa um proxy reverso que não controlamos, e
+ * proxy que bufferiza resposta em streaming segura os eventos até o fim — a geração termina e
+ * a tela continua dizendo "na fila". Aconteceu em produção: a fila já estava vazia e o
+ * usuário via a barra parada.
+ *
+ * Por isso há uma consulta periódica enquanto o job não termina. Ela é o piso: se o SSE
+ * funcionar, a atualização chega antes e a consulta só confirma; se não funcionar, a tela
+ * ainda anda. O custo é uma requisição a cada poucos segundos, e só durante a geração.
  */
 export function useGeneration(sceneId: string) {
   const queryClient = useQueryClient();
@@ -38,6 +47,18 @@ export function useGeneration(sceneId: string) {
     queryKey: queryKeys.generation(jobId ?? ''),
     queryFn: () => api.getGeneration(jobId as string),
     enabled: jobId !== null,
+    /**
+     * Consulta periódica enquanto o job estiver em voo.
+     *
+     * Três segundos: rápido o bastante para não parecer travado, espaçado o bastante para não
+     * pesar. Para sozinha quando o job chega a um estado terminal — `false` desliga o
+     * intervalo, e nada fica consultando um job concluído para sempre.
+     */
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status) return 3000;
+      return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status) ? false : 3000;
+    },
   });
 
   const finish = useCallback(() => {
@@ -63,6 +84,16 @@ export function useGeneration(sceneId: string) {
       if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(event.status)) finish();
     };
 
+    // Sem evento nenhum em vinte segundos, o stream não está entregando — proxy bufferizando,
+    // quase sempre. Fecha e deixa a consulta periódica assumir, em vez de manter aberta uma
+    // conexão que não traz nada.
+    const silence = setTimeout(() => {
+      if (sourceRef.current === source) {
+        source.close();
+        sourceRef.current = null;
+      }
+    }, 20_000);
+
     // O servidor fecha o stream ao terminar, e o EventSource trata isso como erro. Buscar o
     // job resolve os dois casos: término normal e queda de verdade.
     source.onerror = () => {
@@ -72,6 +103,7 @@ export function useGeneration(sceneId: string) {
     };
 
     return () => {
+      clearTimeout(silence);
       source.close();
       sourceRef.current = null;
     };
@@ -82,9 +114,32 @@ export function useGeneration(sceneId: string) {
     onSuccess: finish,
   });
 
+  /**
+   * O progresso que a tela mostra: o mais adiantado entre o SSE e a consulta.
+   *
+   * As duas fontes existem porque nenhuma é confiável sozinha — o SSE pode ficar preso num
+   * proxy, e a consulta chega com até três segundos de atraso. Escolher a mais adiantada faz
+   * a barra andar pela primeira que responder, sem nunca voltar atrás.
+   *
+   * Sem isto, a consulta periódica atualizaria os RESULTADOS e deixaria a barra parada — que
+   * é exatamente o sintoma que ela veio resolver.
+   */
+  const fromJob: GenerationProgress | null = job.data
+    ? {
+        generationJobId: job.data.id,
+        status: job.data.status,
+        statusLabel: job.data.statusLabel,
+        progress: job.data.progress,
+        message: job.data.errorMessage,
+        at: new Date().toISOString(),
+      }
+    : null;
+
+  const current = mostAdvanced(progress, fromJob);
+
   const running =
     start.isPending ||
-    (progress !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(progress.status));
+    (current !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.status));
 
   return {
     start: () => start.mutate(),
@@ -99,7 +154,7 @@ export function useGeneration(sceneId: string) {
     cancel: () => cancel.mutate(),
     canCancel: jobId !== null && running && !start.isPending,
     running,
-    progress,
+    progress: current,
     job: job.data ?? null,
     error:
       start.error instanceof ApiError
@@ -113,4 +168,19 @@ export function useGeneration(sceneId: string) {
       start.reset();
     },
   };
+}
+
+/** Estado terminal ganha de tudo; entre os demais, vence o de maior progresso. */
+function mostAdvanced(
+  a: GenerationProgress | null,
+  b: GenerationProgress | null,
+): GenerationProgress | null {
+  if (!a) return b;
+  if (!b) return a;
+
+  const terminal = (state: GenerationProgress) =>
+    ['COMPLETED', 'FAILED', 'CANCELLED'].includes(state.status);
+
+  if (terminal(a) !== terminal(b)) return terminal(a) ? a : b;
+  return a.progress >= b.progress ? a : b;
 }

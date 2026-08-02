@@ -1506,6 +1506,32 @@ faria um `signal` disparado durante a digitacao virar um aviso vermelho.
 
 ---
 
+## D-077 — SSE deixa de ser a unica fonte do progresso
+
+**Status:** aceita
+
+O progresso vinha so do `EventSource`. Em producao a geracao terminava e a tela continuava
+dizendo "na fila" — a fila ja estava vazia, e o `/health` provou isso. O stream atravessa um
+proxy reverso que nao controlamos, e proxy que bufferiza resposta em streaming segura os
+eventos ate o fim.
+
+Agora ha duas fontes, e a tela mostra **a mais adiantada**: o SSE quando chega, e uma consulta
+a cada tres segundos como piso. Estado terminal ganha de tudo; entre os demais, vence o de
+maior progresso — assim a barra nunca volta atras.
+
+A consulta para sozinha quando o job termina, e o stream se fecha depois de vinte segundos sem
+evento nenhum: manter aberta uma conexao que nao entrega nada custa recurso dos dois lados.
+
+**A licao esta no que quase deu errado.** A primeira versao desta correcao acrescentou so a
+consulta periodica — que atualizava os RESULTADOS e deixava a barra parada, porque `running` e
+o progresso vinham de um estado alimentado exclusivamente pelo SSE. Seria uma correcao que
+parece pronta e nao resolve o sintoma que a motivou.
+
+O SSE continua sendo o caminho principal: entrega antes e sem custo de consulta repetida. O que
+mudou e ele ter deixado de ser condicao para a tela funcionar.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)
