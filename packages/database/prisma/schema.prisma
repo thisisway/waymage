@@ -135,6 +135,11 @@ enum ExportStatus {
 
 // ─── Identidade e tenancy ────────────────────────────────────────────────────
 
+/// Usuario do produto.
+///
+/// `isPlatformAdmin` e a UNICA permissao fora do escopo de workspace: quem a tem enxerga
+/// todos os workspaces. Coluna, e nao lista de e-mails em variavel de ambiente, porque a
+/// coluna deixa rastro de quando alguem entrou e saiu dela.
 model User {
   id            String   @id @default(uuid()) @db.Uuid
   email         String   @unique
@@ -144,6 +149,8 @@ model User {
   emailVerified Boolean  @default(false)
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  isPlatformAdmin Boolean @default(false)
 
   memberships         WorkspaceMember[]
   refreshTokens       RefreshToken[]

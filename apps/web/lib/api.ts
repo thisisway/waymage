@@ -218,10 +218,34 @@ export interface HealthReport {
   dependencies: DependencyCheck[];
 }
 
+export interface AdminWorkspace {
+  id: string;
+  name: string;
+  createdAt: string;
+  owner: { name: string; email: string } | null;
+  subscription: Subscription;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  members: number;
+  projects: number;
+  /** Ids dos provedores com chave ativa. Nunca o segredo. */
+  providers: string[];
+  imagesGenerated: number;
+}
+
+export interface PlatformOverview {
+  workspaces: number;
+  activeSubscriptions: number;
+  trialing: number;
+  imagesLast30Days: number;
+}
+
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  /** Enxerga todos os workspaces. É o que decide se o menu mostra o painel. */
+  isPlatformAdmin?: boolean;
 }
 
 export interface Project {
@@ -539,6 +563,19 @@ export const api = {
       body: { secret },
     }),
 
+  adminOverview: () => apiFetch<PlatformOverview>('/admin/overview'),
+
+  adminWorkspaces: () => apiFetch<AdminWorkspace[]>('/admin/workspaces'),
+
+  adminSetSubscription: (
+    workspaceId: string,
+    input: { status: Subscription['status']; until: string | null },
+  ) =>
+    apiFetch<AdminWorkspace>(`/admin/workspaces/${workspaceId}/subscription`, {
+      method: 'PATCH',
+      body: input,
+    }),
+
   /** Apaga a conta e tudo nela. Exige a senha: sessão aberta não basta. */
   deleteAccount: (password: string) =>
     apiFetch<void>('/account', { method: 'DELETE', body: { password } }),
@@ -620,6 +657,8 @@ export async function uploadAsset(
 /** Chaves de cache do TanStack Query, num lugar só para não divergirem entre telas. */
 export const queryKeys = {
   session: ['session'] as const,
+  adminOverview: ['admin', 'overview'] as const,
+  adminWorkspaces: ['admin', 'workspaces'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['projects', id] as const,
   scenes: (projectId: string) => ['projects', projectId, 'scenes'] as const,

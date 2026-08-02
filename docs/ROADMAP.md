@@ -225,8 +225,9 @@ reserva de 1 para 3 e cobra 3 — carteira 100 → 97, nada preso em reserva.
 - [ ] **Pendente:** `ConsentRecord` para pessoas reais, com revogação
 - [x] Exclusão de conta a pedido do titular, apagando bytes e linhas (D-085)
 - [ ] **Pendente:** expiração automática de conteúdo antigo
-- [ ] **Pendente:** painel administrativo — sem ele, `REVIEW_REQUIRED` falha o job em vez de
-      entrar numa fila, porque não existe quem revise
+- [x] Painel da plataforma: workspaces, uso e assinatura, sem conteúdo de projeto (D-086)
+- [ ] **Pendente:** fila de revisão no painel — enquanto ela não existe, `REVIEW_REQUIRED`
+      falha o job em vez de esperar, porque não existe quem revise
 
 **Aceite (verificado):** `pnpm check` verde (247 testes); contra Postgres, Redis e MinIO, as
 quatro cenas — `BLOCK`, `REVIEW_REQUIRED`, `ALLOW_WITH_WARNING` e `ALLOW` — produzem

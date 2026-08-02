@@ -87,6 +87,14 @@ export function UserMenu() {
             <MenuLink href="/settings" icon="key">
               Chaves de IA
             </MenuLink>
+
+            {/* Só para quem é administrador da plataforma. Esconder não é a proteção — o
+                guard da API é —, mas oferecer uma porta que responde 403 seria ruído. */}
+            {user.isPlatformAdmin && (
+              <MenuLink href="/admin" icon="grid">
+                Painel da plataforma
+              </MenuLink>
+            )}
           </div>
 
           <div className="border-t border-surface-border p-1">
@@ -120,7 +128,7 @@ function MenuLink({
   children,
 }: {
   href: string;
-  icon: 'key';
+  icon: 'key' | 'grid';
   children: React.ReactNode;
 }) {
   return (

@@ -1741,6 +1741,45 @@ apagou. Isto cobre o pedido explicito, que e o caso com peso legal.
 
 ---
 
+## D-086 — O painel da plataforma ve uso e assinatura, nunca conteudo
+
+**Status:** aceita (Fase 11)
+
+Sem gateway de pagamento, ativar um assinante era um `UPDATE` manual no banco de producao — a
+operacao mais arriscada possivel para a tarefa mais rotineira que existe. O painel substitui
+isso.
+
+**E a unica parte do sistema que atravessa o isolamento entre workspaces, de proposito.** Todo
+o resto filtra por `workspaceId` do principal ([D-011](#d-011)); aqui nao ha filtro. Por isso
+`AdminService` nao reaproveita nenhum servico existente: um servico que as vezes filtra e as
+vezes nao e uma falha de tenancy esperando o argumento errado.
+
+**Permissao por flag no usuario, nao por lista de e-mails em variavel de ambiente.** Uma lista
+em env transforma um erro de digitacao em escalonamento de privilegio, nao deixa rastro de quem
+concedeu, e some quando alguem recria o servico. `User.isPlatformAdmin` e falso por default e so
+muda por `UPDATE` explicito — nao existe rota que conceda a si mesma.
+
+**Quem nao e administrador recebe `INSUFFICIENT_ROLE`, a mesma mensagem de papel insuficiente
+do resto do sistema.** Responder "esta rota existe, mas voce nao e administrador" confirmaria
+a existencia do painel para quem estiver sondando.
+
+**Nao mostra conteudo de projeto** — cenas, referencias, imagens, nem o nome do projeto. Saber
+quem usou e quanto e operacao; ver o que a pessoa criou e outra coisa, e o produto guarda imagem
+de gente. A excecao legitima seria a fila de moderacao, onde olhar o conteudo _e_ o trabalho, e
+ela ainda nao existe. **Nenhum valor de credencial**, nem a dica: o painel diz que existe chave,
+nunca qual.
+
+**A auditoria de uma alteracao fica no workspace afetado, nao num registro do painel.** Assim
+a interferencia aparece para quem sofreu, e nao so para quem a fez — a diferenca entre um
+administrador prestar contas e um administrador se anotar. Leitura vai para o log: uma linha de
+auditoria por consulta encheria a tabela de ruido e ainda a associaria a um workspace arbitrario,
+que a listagem nao tem.
+
+Quando a Stripe entrar, ela escreve nos mesmos campos (`subscriptionStatus`, `currentPeriodEnd`)
+e este painel continua existindo para corrigir a mao o que o gateway errar.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AccountModule } from './account/account.module';
+import { AdminModule } from './admin/admin.module';
 import { AssetsModule } from './assets/assets.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { AuditModule } from './audit/audit.module';
@@ -28,6 +29,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     ProjectsModule,
     ScenesModule,
     AccountModule,
+    AdminModule,
     AssetsModule,
     CredentialsModule,
     GenerationsModule,

@@ -28,6 +28,8 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   name: string;
+  /** Enxerga todos os workspaces. É a única permissão fora do escopo de um. */
+  isPlatformAdmin?: boolean;
 }
 
 /** Contexto de auditoria da requisição. Nunca inclui cookie, token ou senha. */

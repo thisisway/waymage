@@ -394,9 +394,29 @@ Nesta ordem, porque cada passo exercita uma camada a mais:
    `COOKIE_SAMESITE`: volte ao passo 6.
 3. **Crie um projeto e uma cena, e gere.** Quatro imagens em poucos segundos com progresso ao
    vivo. Isso exercita API, Redis, fila, worker e R2 de uma vez — é o teste que vale.
-4. **Abra `/billing`.** O crédito saiu do disponível e aparece como consumo. Se ficou preso em
-   "reservado", o worker não concluiu o job.
-5. **Exporte uma imagem.** Fecha o ciclo: conversão no worker e download por URL assinada.
+4. **Exporte uma imagem.** Fecha o ciclo: conversão no worker e download por URL assinada.
+
+---
+
+## Passo 11 — Vire administrador da plataforma
+
+Sem isto você não consegue ativar a assinatura de ninguém — nem a sua, quando os 14 dias de
+avaliação acabarem.
+
+Não existe rota que conceda essa permissão, de propósito: qualquer rota que a concedesse seria
+o alvo mais valioso do sistema. É um `UPDATE` no banco, feito uma vez, pelo terminal do
+Postgres no EasyPanel:
+
+```sql
+UPDATE "User" SET "isPlatformAdmin" = true WHERE email = 'seu@email.com';
+```
+
+Recarregue o app: o menu no canto superior direito passa a mostrar **Painel da plataforma**.
+Lá você vê quem se cadastrou, quantas imagens gerou, se cadastrou chave de IA, e ativa ou
+cancela a assinatura de cada workspace. O painel **não** mostra projetos, cenas nem imagens —
+[D-086](DECISIONS.md#d-086) explica por quê.
+
+Toda alteração de assinatura fica registrada na auditoria do workspace afetado, com o seu id.
 
 ---
 

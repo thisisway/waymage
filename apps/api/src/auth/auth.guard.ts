@@ -16,6 +16,17 @@ export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
 export const REQUIRED_ROLE = 'waymage:role';
 export const RequireRole = (role: WorkspaceRole) => SetMetadata(REQUIRED_ROLE, role);
 
+export const PLATFORM_ADMIN = 'platformAdmin';
+
+/**
+ * Exige administrador da plataforma.
+ *
+ * É o único marcador que autoriza atravessar o isolamento entre workspaces. Toda rota que o
+ * usa lê dado de gente que não pediu nada — por isso ele é explícito, e por isso a concessão
+ * mora numa coluna, fora do alcance de qualquer rota.
+ */
+export const PlatformAdmin = () => SetMetadata(PLATFORM_ADMIN, true);
+
 /**
  * Dispensa a verificação de CSRF.
  *
@@ -95,7 +106,7 @@ export class AuthGuard implements CanActivate {
       select: {
         role: true,
         workspaceId: true,
-        user: { select: { id: true, email: true, name: true } },
+        user: { select: { id: true, email: true, name: true, isPlatformAdmin: true } },
       },
     });
 
@@ -103,6 +114,21 @@ export class AuthGuard implements CanActivate {
       throw new AppError(
         'NO_WORKSPACE',
         'Sua conta não pertence a nenhum workspace.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const needsPlatformAdmin = this.reflector.getAllAndOverride<boolean>(PLATFORM_ADMIN, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (needsPlatformAdmin && !membership.user.isPlatformAdmin) {
+      // Mesma mensagem de papel insuficiente, de propósito: responder "esta rota existe, mas
+      // você não é administrador" confirmaria a existência do painel para quem sondar.
+      throw new AppError(
+        'INSUFFICIENT_ROLE',
+        'Você não tem permissão para esta ação.',
         HttpStatus.FORBIDDEN,
       );
     }
