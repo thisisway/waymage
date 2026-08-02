@@ -1532,6 +1532,58 @@ mudou e ele ter deixado de ser condicao para a tela funcionar.
 
 ---
 
+## D-078 — A edicao localizada passa a ser localizada de fato
+
+**Status:** aceita · completa a [D-051](#d-051)
+
+O fornecedor nao recebe canal de mascara: recebe imagens e texto, e devolve uma imagem
+**inteira, nova**. Ate aqui, "editar uma regiao" redesenhava o quadro todo — iluminacao
+deslocada, rosto diferente, fundo refeito. O verbo era indistinguivel de "refinar", que ja
+existe.
+
+O worker passa a compor o resultado sobre a original **atraves da mascara**. Fora dela os
+pixels originais permanecem identicos, nao parecidos. E essa igualdade que separa editar de
+regerar.
+
+Com isso o `featherPx` finalmente faz alguma coisa. Ele era guardado na `MaskAsset`, viajava
+ate a requisicao do provedor como `maskFeatherPx` e **ninguem o lia** — um controle na tela que
+prometia e nao cumpria desde a Fase 8. Agora e o desfoque do alfa, e sem ele a costura entre o
+novo e o original aparece como borda dura.
+
+**A base enviada vai com a regiao contornada.** Mandar a mascara como imagem separada obriga o
+modelo a correlacionar duas imagens sozinho; um contorno desenhado sobre a propria original
+elimina essa correlacao. Contorno e nao preenchimento: area tingida tende a ser reproduzida na
+saida, e cairia justamente dentro do trecho que aparece no resultado final.
+
+**Falha na composicao nao descarta o resultado.** Entrega a imagem crua do fornecedor com aviso
+no log — pior que a composicao, muito melhor que perder uma geracao ja paga.
+
+**Limite aceito:** edicao que exige mudar o entorno — trocar o fundo e reiluminar o sujeito —
+fica com emenda, porque tudo fora da mascara esta travado. Quem quer redesenho tem "refinar".
+Se isso incomodar na pratica, a saida e uma escolha explicita na tela, nao um padrao diferente.
+
+---
+
+## D-079 — Tres operacoes do `sharp` nao fizeram o que a API sugere
+
+**Status:** registrada (implementacao)
+
+Documentado porque custou tres rodadas de depuracao e vai custar de novo em quem mexer nisto:
+
+1. **`joinChannel` nao vira transparencia.** O canal entrou como quarta banda comum, o PNG
+   voltou com tres canais, e a composicao ignorou a mascara inteira — trocava a imagem toda.
+2. **`blend: 'difference'`** sobre imagens limiarizadas devolveu tudo zero.
+3. **`threshold()`** nao teve efeito naquela posicao do pipeline: a saida voltava sendo o
+   desfoque cru.
+
+Nos tres casos a saida foi um laco explicito sobre os bytes. Previsivel, testavel lendo pixels,
+e custa milissegundos mesmo em 2K. As duas primeiras falhavam **em silencio** — produziam uma
+imagem plausivel e errada, que so aparece olhando o resultado.
+
+E o motivo de os testes desta area conferirem cor de pixel em vez de "nao lancou excecao".
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

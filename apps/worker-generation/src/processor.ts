@@ -30,6 +30,7 @@ import sharp from 'sharp';
 import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
+import { composeThroughMask, markRegion } from './mask-compose';
 import { recordUsage } from './usage';
 import { isBlocking, moderateImage, moderateText, recordDecision } from './moderation';
 import {
@@ -233,25 +234,49 @@ export async function processGenerationJob(
      * arquivo repintar e ONDE. Trata-los como referencia os colocaria em pe de igualdade com
      * as referencias de estilo, e o provedor escolheria quanto peso dar.
      */
-    const editInputs =
+    const edit =
       record.operationType === 'MASKED_EDIT' && record.sourceResult?.asset
         ? {
-            baseImageUrl: await storage.signedReadUrl(
-              record.sourceResult.asset.storageKey,
-              SIGNED_URL_TTL.read,
-            ),
-            ...(record.editOperation?.mask?.asset
-              ? {
-                  maskUrl: await storage.signedReadUrl(
-                    record.editOperation.mask.asset.storageKey,
-                    SIGNED_URL_TTL.read,
-                  ),
-                  maskFeatherPx: record.editOperation.mask.featherPx,
-                  maskInverted: record.editOperation.mask.inverted,
-                }
-              : {}),
+            originalKey: record.sourceResult.asset.storageKey,
+            mask: record.editOperation?.mask ?? null,
           }
-        : {};
+        : null;
+
+    /**
+     * A base enviada ao fornecedor vai com a região contornada.
+     *
+     * Mandar a máscara como imagem separada e explicar por texto o que ela significa obriga o
+     * modelo a correlacionar duas imagens sozinho. Desenhar o contorno sobre a própria
+     * original elimina essa correlação — ele vê onde mexer.
+     *
+     * A imagem marcada fica no bucket, e não em memória: o adapter recebe URL, nunca bytes,
+     * e guardá-la torna possível conferir depois o que exatamente foi enviado.
+     */
+    const editInputs = edit
+      ? {
+          baseImageUrl: await storage.signedReadUrl(
+            edit.mask?.asset
+              ? await markedBaseKey(edit.originalKey, edit.mask, {
+                  workspaceId: payload.workspaceId,
+                  projectId: record.projectId,
+                  jobId: record.id,
+                  storage,
+                })
+              : edit.originalKey,
+            SIGNED_URL_TTL.read,
+          ),
+          ...(edit.mask?.asset
+            ? {
+                maskUrl: await storage.signedReadUrl(
+                  edit.mask.asset.storageKey,
+                  SIGNED_URL_TTL.read,
+                ),
+                maskFeatherPx: edit.mask.featherPx,
+                maskInverted: edit.mask.inverted,
+              }
+            : {}),
+        }
+      : {};
 
     await advance('COMPILING', 'ROUTING');
     await advance('ROUTING', 'SUBMITTING');
@@ -430,7 +455,22 @@ export async function processGenerationJob(
     });
 
     await advance('PROCESSING', 'DOWNLOADING');
-    const stored = await storeImages(status.images, {
+
+    /**
+     * Edição localizada: o que o fornecedor devolveu entra só dentro da máscara.
+     *
+     * Ele não recebe canal de máscara — devolve uma imagem inteira, nova. Sem esta composição
+     * "editar uma região" redesenha o quadro todo, e o verbo vira um sinônimo de "refinar".
+     *
+     * Falhar aqui não descarta o resultado: melhor entregar a imagem do fornecedor inteira,
+     * com aviso no log, do que perder uma geração que o usuário já pagou.
+     */
+    const delivered =
+      edit?.mask?.asset && status.images.length > 0
+        ? await composeEdits(status.images, edit, storage, log)
+        : status.images;
+
+    const stored = await storeImages(delivered, {
       workspaceId: payload.workspaceId,
       projectId: record.projectId,
       jobId: record.id,
@@ -693,4 +733,88 @@ async function storeImages(
   }
 
   return results;
+}
+
+/** Máscara com os parâmetros que o usuário escolheu, já resolvida. */
+interface EditMask {
+  featherPx: number;
+  inverted: boolean;
+  asset: { storageKey: string } | null;
+}
+
+/**
+ * Grava a base com a região contornada e devolve a chave dela.
+ *
+ * Fica ao lado do resultado de origem, sob o id do job: é um insumo daquela edição, e não um
+ * asset do projeto — não deve aparecer na biblioteca do usuário.
+ */
+async function markedBaseKey(
+  originalKey: string,
+  mask: EditMask,
+  ctx: {
+    workspaceId: string;
+    projectId: string;
+    jobId: string;
+    storage: StorageService;
+  },
+): Promise<string> {
+  const [original, maskBytes] = await Promise.all([
+    ctx.storage.getObject(originalKey),
+    ctx.storage.getObject(mask.asset?.storageKey ?? ''),
+  ]);
+
+  const marked = await markRegion(original, maskBytes, { inverted: mask.inverted });
+  const key = storageKeys.generationResult(
+    ctx.workspaceId,
+    ctx.projectId,
+    ctx.jobId,
+    'input',
+    0,
+    'jpeg',
+  );
+
+  await ctx.storage.put({ key, body: marked, contentType: 'image/jpeg' });
+  return key;
+}
+
+/** Compõe cada imagem devolvida sobre a original, através da máscara. */
+async function composeEdits(
+  images: readonly ProviderImage[],
+  edit: { originalKey: string; mask: EditMask | null },
+  storage: StorageService,
+  log: Logger,
+): Promise<ProviderImage[]> {
+  const maskKey = edit.mask?.asset?.storageKey;
+  if (!maskKey || !edit.mask) return [...images];
+
+  try {
+    const [original, maskBytes] = await Promise.all([
+      storage.getObject(edit.originalKey),
+      storage.getObject(maskKey),
+    ]);
+
+    return await Promise.all(
+      images.map(async (image) => {
+        const composed = await composeThroughMask(original, image.data, maskBytes, {
+          featherPx: edit.mask?.featherPx ?? 0,
+          inverted: edit.mask?.inverted ?? false,
+        });
+
+        // Dimensões passam a ser as da original: é sobre ela que a composição aconteceu.
+        const { width, height } = await sharp(composed).metadata();
+        return {
+          ...image,
+          data: composed,
+          mimeType: 'image/jpeg',
+          width: width ?? image.width,
+          height: height ?? image.height,
+        };
+      }),
+    );
+  } catch (error) {
+    // Entregar a imagem inteira do fornecedor é pior que a composição, e muito melhor que
+    // perder uma geração que já custou dinheiro.
+    log.error({ err: error }, 'Falha ao compor a edição pela máscara; entregando o resultado cru');
+    return [...images];
+  }
 }
