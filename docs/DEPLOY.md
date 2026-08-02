@@ -385,6 +385,11 @@ Nesta ordem, porque cada passo exercita uma camada a mais:
 
 1. **`GET https://<api>/health`** → `status: ok`, com `postgres`, `redis` e `storage` cada um
    em `ok`. Se algum estiver diferente, a resposta já diz qual — pare aqui e resolva.
+
+   O campo `queue` mostra a fila de geração. Depois de gerar, `waiting` alto com `active` em
+   zero significa que **ninguém está consumindo** — worker fora do ar, apontando para outro
+   Redis, ou em ciclo de restart por variável faltando.
+
 2. **Cadastre-se pela tela do web.** Se o cadastro passa e a tela seguinte volta 401, é o
    `COOKIE_SAMESITE`: volte ao passo 6.
 3. **Crie um projeto e uma cena, e gere.** Quatro imagens em poucos segundos com progresso ao

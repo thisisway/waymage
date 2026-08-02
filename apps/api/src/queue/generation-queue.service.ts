@@ -29,6 +29,23 @@ export class GenerationQueueService implements OnModuleDestroy {
   }
 
   /**
+   * Quanta coisa está esperando e quanta está em execução.
+   *
+   * Existe para responder de fora a pergunta que já custou três investigações: "a geração
+   * está parada porque o worker caiu, ou porque ela é lenta?". Fila crescendo com nada em
+   * `active` é worker ausente; `active` alto é worker trabalhando.
+   */
+  async depth(): Promise<{ waiting: number; active: number; failed: number }> {
+    const [waiting, active, failed] = await Promise.all([
+      this.queue.getWaitingCount(),
+      this.queue.getActiveCount(),
+      this.queue.getFailedCount(),
+    ]);
+
+    return { waiting, active, failed };
+  }
+
+  /**
    * Enfileira uma geração. `jobId` do BullMQ = id do GenerationJob, o que torna o enqueue
    * idempotente: reenviar a mesma criação não duplica execução.
    */

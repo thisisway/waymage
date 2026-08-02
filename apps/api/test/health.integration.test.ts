@@ -42,9 +42,16 @@ describe('health checks', () => {
     const report = JSON.parse(response.body) as {
       status: string;
       dependencies: { name: string; state: string }[];
+      queue: { waiting: number; active: number; failed: number } | null;
     };
     expect(report.status).toBe('ok');
     expect(report.dependencies.map((d) => d.name).sort()).toEqual(['postgres', 'redis', 'storage']);
+
+    // A profundidade da fila responde de fora "o worker está consumindo?" — pergunta que já
+    // custou três investigações, cada uma começando por adivinhação.
+    expect(report.queue).not.toBeNull();
+    expect(typeof report.queue?.waiting).toBe('number');
+    expect(typeof report.queue?.active).toBe('number');
   });
 
   it('não vaza host, credencial ou detalhe de driver', async () => {
