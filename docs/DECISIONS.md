@@ -1193,8 +1193,21 @@ o build continuou passando porque o TypeScript resolve pelos `paths` do tsconfig
 apareceu no boot em producao: `Cannot find module '@waymage/billing'`.
 
 A correcao nao foi acrescentar as duas linhas. Foi parar de enumerar: o estagio de runtime
-copia `packages/` inteiro, entao um pacote novo entra sozinho. Enumerar continua no estagio de
-dependencias, onde serve ao cache e onde uma falta custa cache, nao correcao.
+copia `packages/` inteiro, entao um pacote novo entra sozinho.
+
+**Correcao seguinte, mesmo defeito pelo outro lado.** A enumeracao ficou no estagio de
+dependencias, com o argumento de que ali uma falta custaria cache e nao correcao. O argumento
+so valia para pacote ACRESCENTADO. Quando `packages/billing` foi removido na migracao para
+BYOK, o `COPY packages/billing/package.json` passou a apontar para um caminho inexistente e
+derrubou os tres builds.
+
+A enumeracao saiu tambem dali, substituida por `pnpm fetch`: ele popula o store a partir do
+**lockfile**, sem precisar saber quais pacotes existem no workspace. O `pnpm install` migra
+para o estagio de build, com `--offline`, ja que o store tem tudo. O cache melhora de quebra —
+a camada pesada so e refeita quando o lockfile muda.
+
+A licao: uma lista escrita a mao que espelha a estrutura do repositorio quebra nas duas
+direcoes, e "custa so cache" foi uma analise incompleta.
 
 O `web` e a excecao deliberada: depende de UM pacote do workspace, e copiar a arvore toda
 traria o cliente do Prisma para dentro da imagem do frontend sem nenhum uso.

@@ -11,24 +11,23 @@ WORKDIR /app
 
 # ─── Dependências ────────────────────────────────────────────────────────────
 FROM base AS deps
-# Só os manifestos primeiro: enquanto eles não mudarem, o Docker reaproveita esta camada
-# e o install não roda de novo a cada alteração de código.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/api/package.json apps/api/
-COPY apps/web/package.json apps/web/
-COPY apps/worker-generation/package.json apps/worker-generation/
-COPY packages/billing/package.json packages/billing/
-COPY packages/database/package.json packages/database/
-COPY packages/domain/package.json packages/domain/
-COPY packages/prompt-compiler/package.json packages/prompt-compiler/
-COPY packages/provider-sdk/package.json packages/provider-sdk/
-COPY packages/scene-spec/package.json packages/scene-spec/
-COPY packages/storage/package.json packages/storage/
-RUN pnpm install --frozen-lockfile
+# `pnpm fetch` popula o store a partir do LOCKFILE, sem precisar saber quais pacotes existem
+# no workspace.
+#
+# A alternativa era um `COPY` por manifesto, e ela já quebrou duas vezes: pacote novo ficava
+# de fora e o erro só aparecia no boot em produção; pacote removido derrubava o build inteiro,
+# porque o caminho copiado deixara de existir.
+#
+# De quebra, o cache melhora: esta camada só é refeita quando o lockfile muda, e não a cada
+# alteração de manifesto.
+COPY pnpm-lock.yaml ./
+RUN pnpm fetch
 
 # ─── Build ───────────────────────────────────────────────────────────────────
 FROM deps AS build
 COPY . .
+# `--offline`: o store já tem tudo o que o lockfile pede, então não há rede aqui.
+RUN pnpm install --offline --frozen-lockfile
 # O client do Prisma é gerado antes do compile: o código da API depende dos tipos dele.
 RUN pnpm db:generate && pnpm --filter @waymage/api... build
 
