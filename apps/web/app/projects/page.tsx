@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { ApiError, api, queryKeys, type Project } from '../../lib/api';
 import { timeAgo } from '../../lib/format';
 import { Icon } from '../../components/ui/icons';
+import { UserMenu } from '../../components/user-menu';
 import { toast } from '../../components/ui/toast';
 
 /**
@@ -87,33 +88,11 @@ export default function ProjectsPage() {
     form.reset();
   }
 
-  async function handleLogout() {
-    await api.logout().catch(() => undefined);
-    queryClient.clear();
-    router.replace('/login');
-  }
-
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface-base/95 px-6 py-3 backdrop-blur">
         <span className="text-h3 text-ink-primary">Waymage</span>
-        <div className="flex items-center gap-5 text-micro">
-          <a
-            href="/settings"
-            className="flex items-center gap-1.5 font-semibold text-ink-secondary transition-colors hover:text-ink-primary"
-          >
-            <Icon name="key" className="h-3.5 w-3.5" />
-            chaves de IA
-          </a>
-          <span className="text-ink-muted">{session.data.user.email}</span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="font-semibold text-ink-secondary transition-colors hover:text-ink-primary"
-          >
-            Sair
-          </button>
-        </div>
+        <UserMenu />
       </header>
 
       <main className="mx-auto max-w-[1600px] px-6 py-6">

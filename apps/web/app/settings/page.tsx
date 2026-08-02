@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Button } from '../../components/ui/controls';
 import { Icon, Spinner } from '../../components/ui/icons';
 import { toast } from '../../components/ui/toast';
+import { UserMenu } from '../../components/user-menu';
 import { ApiError, api, queryKeys, type CredentialProvider } from '../../lib/api';
 import { timeAgo } from '../../lib/format';
 
@@ -59,6 +60,9 @@ export default function SettingsPage() {
           <Icon name="chevronLeft" />
         </a>
         <span className="text-h3 text-ink-primary">Chaves de IA</span>
+        <div className="ml-auto">
+          <UserMenu />
+        </div>
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 p-6">

@@ -18,6 +18,7 @@ import { Button } from '../../../components/ui/controls';
 import { Icon, Spinner } from '../../../components/ui/icons';
 import { toast } from '../../../components/ui/toast';
 import { SaveIndicator } from '../../../components/save-indicator';
+import { UserMenu } from '../../../components/user-menu';
 import { ApiError, api, queryKeys, type Scene } from '../../../lib/api';
 import { useAutosave } from '../../../lib/use-autosave';
 import { useGeneration } from '../../../lib/use-generation';
@@ -291,6 +292,9 @@ function TopBar({
             {generating ? 'Gerando…' : 'Gerar'}
           </span>
         </Button>
+
+        {/* Depois da ação principal, como manda a convenção: a conta é o último item. */}
+        <UserMenu />
       </div>
     </header>
   );
