@@ -1667,6 +1667,47 @@ nenhuma das duas sozinha.
 
 ---
 
+## D-083 — OpenAI como segundo provedor, e a mascara passa a ser mascara
+
+**Status:** aceita
+
+O `/v1/images/edits` recebe um PNG com canal alfa e trata a **transparencia como a regiao a
+alterar**. E a razao principal deste adapter: no Gemini a mascara vai como mais uma imagem, com
+uma frase explicando o que ela significa, e o modelo deduz. Aqui ela e usada como mascara.
+
+**O preco e a proporcao.** A API aceita tres tamanhos, que dao 1:1, 3:2 e 2:3. As outras sete do
+`SceneSpec` continuam com o Gemini — e o roteador descarta este provedor sozinho quando a cena
+pede uma delas, sem codigo novo de decisao ([D-056](#d-056)). E o desenho se pagando: dois
+fornecedores com capacidades diferentes coexistem porque elegibilidade sempre foi binaria.
+
+**Outras diferencas que o contrato esconde de quem chama:** `/generations` e JSON e `/edits` e
+multipart; `n` entrega varias imagens numa chamada, enquanto o Gemini cobra uma requisicao por
+imagem; e o formato de saida pedido na cena e honrado pelo proprio fornecedor, sem depender da
+conversao na exportacao.
+
+**Com dois provedores reais, o fallback deixa de ser decorativo.** Ate aqui a lista de
+candidatos quase sempre tinha um item.
+
+---
+
+## D-084 — O formato da mascara e uma capacidade do provedor
+
+**Status:** aceita
+
+`ProviderCapabilities.maskEncoding` declara `luminance` ou `alpha`. Nao e detalhe de
+implementacao: mandar a forma errada significa, num caso, edicao sem efeito, e no outro,
+requisicao recusada — e o adapter nao pode converter sozinho, porque converter exige decodificar
+imagem e este pacote e deliberadamente livre de binario nativo.
+
+Quem converte e o worker, que ja carrega o `sharp`. Isso obrigou os insumos da edicao a serem
+montados **por candidato**, dentro da tentativa, e nao uma vez antes do laco.
+
+De quebra, o contorno desenhado na base ([D-078](#d-078)) passou a ser aplicado so para
+`luminance`. Para quem le a mascara pelo alfa ele seria ruido — uma linha verde desenhada sobre
+a imagem que o modelo vai editar, sem nenhuma pergunta que ela responda.
+
+---
+
 ## D-013 — Postgres 17, Redis 8, Node 22+
 
 **Status:** aceita (Fase 1)

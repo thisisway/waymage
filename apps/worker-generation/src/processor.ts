@@ -19,6 +19,7 @@ import {
   ProviderError,
   type GenerationMode,
   type ImageProvider,
+  type MaskEncoding,
   type ProviderImage,
   type ProviderReference,
 } from '@waymage/provider-sdk';
@@ -30,7 +31,7 @@ import sharp from 'sharp';
 import { env } from './config/env';
 import type { EventPublisher } from './events';
 import { evaluateResult } from './evaluation';
-import { composeThroughMask, markRegion } from './mask-compose';
+import { composeThroughMask, markRegion, toAlphaMask } from './mask-compose';
 import { recordUsage } from './usage';
 import { isBlocking, moderateImage, moderateText, recordDecision } from './moderation';
 import {
@@ -243,40 +244,52 @@ export async function processGenerationJob(
         : null;
 
     /**
-     * A base enviada ao fornecedor vai com a região contornada.
+     * Os insumos da edição dependem de QUEM vai recebê-los.
      *
-     * Mandar a máscara como imagem separada e explicar por texto o que ela significa obriga o
-     * modelo a correlacionar duas imagens sozinho. Desenhar o contorno sobre a própria
-     * original elimina essa correlação — ele vê onde mexer.
+     * Um provedor que lê a máscara pelo alfa (OpenAI) precisa dela convertida, e não se
+     * beneficia do contorno — ele sabe onde mexer. Um que a recebe como imagem comum (Gemini)
+     * precisa do contorno justamente porque não sabe.
      *
-     * A imagem marcada fica no bucket, e não em memória: o adapter recebe URL, nunca bytes,
-     * e guardá-la torna possível conferir depois o que exatamente foi enviado.
+     * Por isso isto é calculado por candidato, dentro da tentativa, e não uma vez antes do
+     * laço: mandar a forma errada significa, num caso, edição sem efeito, e no outro,
+     * requisição recusada.
      */
-    const editInputs = edit
-      ? {
-          baseImageUrl: await storage.signedReadUrl(
-            edit.mask?.asset
-              ? await markedBaseKey(edit.originalKey, edit.mask, {
-                  workspaceId: payload.workspaceId,
-                  projectId: record.projectId,
-                  jobId: record.id,
-                  storage,
-                })
-              : edit.originalKey,
-            SIGNED_URL_TTL.read,
-          ),
-          ...(edit.mask?.asset
-            ? {
-                maskUrl: await storage.signedReadUrl(
-                  edit.mask.asset.storageKey,
-                  SIGNED_URL_TTL.read,
-                ),
-                maskFeatherPx: edit.mask.featherPx,
-                maskInverted: edit.mask.inverted,
-              }
-            : {}),
-        }
-      : {};
+    const editInputsFor = async (provider: ImageProvider) => {
+      if (!edit) return {};
+
+      const encoding = provider.getCapabilities().maskEncoding ?? 'luminance';
+      const mask = edit.mask?.asset ? edit.mask : null;
+
+      const baseKey =
+        mask && encoding === 'luminance'
+          ? await markedBaseKey(edit.originalKey, mask, {
+              workspaceId: payload.workspaceId,
+              projectId: record.projectId,
+              jobId: record.id,
+              storage,
+            })
+          : edit.originalKey;
+
+      const maskKey = mask
+        ? await maskKeyFor(edit.originalKey, mask, encoding, {
+            workspaceId: payload.workspaceId,
+            projectId: record.projectId,
+            jobId: record.id,
+            storage,
+          })
+        : null;
+
+      return {
+        baseImageUrl: await storage.signedReadUrl(baseKey, SIGNED_URL_TTL.read),
+        ...(maskKey && mask
+          ? {
+              maskUrl: await storage.signedReadUrl(maskKey, SIGNED_URL_TTL.read),
+              maskFeatherPx: mask.featherPx,
+              maskInverted: mask.inverted,
+            }
+          : {}),
+      };
+    };
 
     await advance('COMPILING', 'ROUTING');
     await advance('ROUTING', 'SUBMITTING');
@@ -358,7 +371,7 @@ export async function processGenerationJob(
         ...(seed === undefined ? {} : { seed }),
         transparentBackground: spec.output.transparentBackground,
         sceneSpec: spec,
-        ...editInputs,
+        ...(await editInputsFor(provider)),
       } as const;
 
       const providerRun = await prisma.providerRun.create({
@@ -774,6 +787,44 @@ async function markedBaseKey(
   );
 
   await ctx.storage.put({ key, body: marked, contentType: 'image/jpeg' });
+  return key;
+}
+
+/**
+ * A máscara na forma que o provedor espera, gravada e pronta para ser assinada.
+ *
+ * `luminance` usa a máscara como foi pintada. `alpha` exige conversão e o tamanho exato da
+ * imagem base — a API recusa qualquer divergência.
+ */
+async function maskKeyFor(
+  originalKey: string,
+  mask: EditMask,
+  encoding: MaskEncoding,
+  ctx: { workspaceId: string; projectId: string; jobId: string; storage: StorageService },
+): Promise<string | null> {
+  const source = mask.asset?.storageKey;
+  if (!source) return null;
+  if (encoding === 'luminance') return source;
+
+  const [original, maskBytes] = await Promise.all([
+    ctx.storage.getObject(originalKey),
+    ctx.storage.getObject(source),
+  ]);
+
+  const { width, height } = await sharp(original).metadata();
+  if (!width || !height) return source;
+
+  const converted = await toAlphaMask(maskBytes, width, height, { inverted: mask.inverted });
+  const key = storageKeys.generationResult(
+    ctx.workspaceId,
+    ctx.projectId,
+    ctx.jobId,
+    'mask-alpha',
+    0,
+    'png',
+  );
+
+  await ctx.storage.put({ key, body: converted, contentType: 'image/png' });
   return key;
 }
 

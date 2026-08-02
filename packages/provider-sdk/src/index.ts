@@ -4,6 +4,8 @@ export * from './registry';
 export * from './router';
 export * from './fake-provider';
 export * from './google-provider';
+export * from './openai-provider';
 export * from './presets';
 export * from './credential-providers';
 export { encodePng } from './png';
+export { imageSize } from './image-size';

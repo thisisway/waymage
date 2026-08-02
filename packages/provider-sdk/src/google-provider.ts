@@ -1,5 +1,6 @@
 import type { AspectRatio } from '@waymage/scene-spec';
 import { ProviderError } from './errors';
+import { imageSize } from './image-size';
 import type {
   ImageProvider,
   ProviderCapabilities,
@@ -461,47 +462,4 @@ export class GoogleImageProvider implements ImageProvider {
       data: bytes.toString('base64'),
     };
   }
-}
-
-/**
- * Largura e altura, lidas do cabeçalho.
- *
- * Uma varredura de bytes em vez de uma dependência de decodificação de imagem: só precisamos
- * de dois números, que o `GenerationResult` guarda e o cálculo de aderência usa. Trazer um
- * decodificador para isso colocaria binário nativo num pacote que hoje roda em qualquer lugar.
- *
- * O worker ainda mede com `sharp` quando isto devolver zero — cinto e suspensório, porque
- * dimensão errada não falha alto: ela vira uma legenda "0×0" e uma avaliação sem sentido.
- */
-function imageSize(data: Buffer): [number, number] | null {
-  if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) {
-    // PNG: IHDR vem sempre no mesmo lugar.
-    return [data.readUInt32BE(16), data.readUInt32BE(20)];
-  }
-
-  if (data.length < 4 || data.readUInt16BE(0) !== 0xffd8) return null;
-
-  /**
-   * JPEG: percorre os segmentos até o SOF, que carrega as dimensões.
-   *
-   * Não dá para ler de um deslocamento fixo como no PNG — antes do SOF vêm metadados de
-   * tamanho variável (EXIF, perfil de cor, miniatura), e o fornecedor decide quais inclui.
-   */
-  let offset = 2;
-  while (offset + 9 < data.length) {
-    if (data[offset] !== 0xff) {
-      offset++;
-      continue;
-    }
-
-    const marker = data[offset + 1] ?? 0;
-    // SOF0..SOF15, exceto DHT (C4), JPG (C8) e DAC (CC), que não descrevem o quadro.
-    const isFrameHeader = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
-
-    if (isFrameHeader) return [data.readUInt16BE(offset + 7), data.readUInt16BE(offset + 5)];
-
-    offset += 2 + data.readUInt16BE(offset + 2);
-  }
-
-  return null;
 }

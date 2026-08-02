@@ -8,6 +8,20 @@ import type { AspectRatio, ImageFormat, SceneSpec } from '@waymage/scene-spec';
  * orquestrador, no compilador ou no banco.
  */
 
+/**
+ * Como o provedor espera receber a máscara de edição.
+ *
+ * `luminance` — imagem opaca em preto e branco, onde o branco marca a região. É o que o
+ * Gemini recebe, e ele a trata como mais uma imagem de entrada.
+ *
+ * `alpha` — a transparência é a máscara. É o que a OpenAI exige, e o que faz a máscara ser
+ * usada COMO máscara em vez de deduzida.
+ *
+ * A diferença precisa ser declarada porque quem converte é o worker: mandar a forma errada
+ * significa, num caso, edição sem efeito, e no outro, requisição recusada.
+ */
+export type MaskEncoding = 'luminance' | 'alpha';
+
 export interface ProviderCapabilities {
   textToImage: boolean;
   imageToImage: boolean;
@@ -22,6 +36,8 @@ export interface ProviderCapabilities {
   supportedFormats: readonly ImageFormat[];
   maxReferenceImages: number;
   maxOutputs: number;
+  /** Só relevante quando `maskedEdit`. Padrão `luminance`. */
+  maskEncoding?: MaskEncoding;
 }
 
 export type GenerationMode = 'draft' | 'final' | 'edit';

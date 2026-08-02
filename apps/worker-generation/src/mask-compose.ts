@@ -116,6 +116,38 @@ async function withAlpha(
 }
 
 /**
+ * A máscara convertida para transparência.
+ *
+ * Nossa máscara é opaca, com branco marcando a região. A OpenAI espera o contrário: o canal
+ * alfa é a máscara, e o que está transparente é o que muda. Mandar a nossa forma para lá faz a
+ * requisição ser recusada — o endpoint exige alfa.
+ *
+ * O redimensionamento não é opcional: a API exige que a máscara tenha exatamente o tamanho da
+ * imagem base, e a nossa foi pintada na resolução do resultado de origem.
+ */
+export async function toAlphaMask(
+  maskBytes: Buffer,
+  width: number,
+  height: number,
+  options: { inverted: boolean },
+): Promise<Buffer> {
+  const alpha = await maskAlpha(maskBytes, width, height, {
+    featherPx: 0,
+    inverted: options.inverted,
+  });
+
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < width * height; i++) {
+    // Preto opaco onde preserva, transparente onde edita — o inverso do nosso alfa.
+    rgba[i * 4 + 3] = 255 - (alpha[i] ?? 0);
+  }
+
+  return sharp(rgba, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
+}
+
+/**
  * A original com a região a editar contornada.
  *
  * Mandar a máscara como uma segunda imagem em preto e branco e explicar por texto o que ela

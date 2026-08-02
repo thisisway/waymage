@@ -33,6 +33,14 @@ export const CREDENTIAL_PROVIDERS: readonly CredentialProvider[] = [
     requirement:
       'O projeto precisa de faturamento configurado. No nível gratuito os modelos de imagem respondem com erro de cota, e a chave parece inválida sem estar.',
   },
+  {
+    id: 'openai-image',
+    label: 'OpenAI',
+    helpUrl: 'https://platform.openai.com/api-keys',
+    keyPrefix: 'sk-',
+    requirement:
+      'Gera em 1:1, 3:2 e 2:3 apenas — cenas noutras proporções continuam indo para outro provedor. Em compensação, a máscara de edição é usada como máscara de verdade.',
+  },
 ];
 
 export function isCredentialProvider(id: string): boolean {

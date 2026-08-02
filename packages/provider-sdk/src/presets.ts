@@ -1,5 +1,6 @@
 import { FakeImageProvider } from './fake-provider';
 import { GoogleImageProvider } from './google-provider';
+import { OpenAIImageProvider } from './openai-provider';
 import { ProviderRegistry } from './registry';
 
 /**
@@ -17,6 +18,7 @@ export const PROVIDER_IDS = {
   fast: 'fake-rapido',
   studio: 'fake-estudio',
   google: 'google-gemini',
+  openai: 'openai-image',
 } as const;
 
 /**
@@ -29,6 +31,7 @@ export const PROVIDER_QUALITY: Readonly<Record<string, number>> = {
   [PROVIDER_IDS.fast]: 0.55,
   [PROVIDER_IDS.studio]: 0.9,
   [PROVIDER_IDS.google]: 0.95,
+  [PROVIDER_IDS.openai]: 0.9,
 };
 
 export function createProviderRegistry(options: { latencyMs?: number } = {}): ProviderRegistry {
@@ -80,6 +83,9 @@ export function createWorkspaceRegistry(options: {
   for (const credential of options.credentials) {
     if (credential.provider === PROVIDER_IDS.google) {
       registry.register(new GoogleImageProvider({ apiKey: credential.secret }));
+    }
+    if (credential.provider === PROVIDER_IDS.openai) {
+      registry.register(new OpenAIImageProvider({ apiKey: credential.secret }));
     }
   }
 

@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { composeThroughMask, markRegion } from './mask-compose';
+import { composeThroughMask, markRegion, toAlphaMask } from './mask-compose';
 
 /**
  * A composição é verificada lendo pixels, não conferindo que a função não lançou.
@@ -130,5 +130,30 @@ describe('markRegion', () => {
     // justamente dentro do trecho que aparece no resultado final.
     expect(middle.r).toBeGreaterThan(200);
     expect(middle.g).toBeLessThan(80);
+  });
+});
+
+describe('toAlphaMask', () => {
+  it('inverte: o que a gente pinta vira transparente', async () => {
+    const alphaMask = await toAlphaMask(await halfMask(), W, H, { inverted: false });
+
+    const { data, info } = await sharp(alphaMask)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    expect(info.channels).toBe(4);
+    // Metade esquerda pintada → transparente, que é o que a OpenAI lê como "edite aqui".
+    expect(data[(20 * W + 10) * 4 + 3]).toBe(0);
+    expect(data[(20 * W + 50) * 4 + 3]).toBe(255);
+  });
+
+  it('redimensiona para o tamanho exigido', async () => {
+    // A API recusa máscara de tamanho diferente da imagem base.
+    const alphaMask = await toAlphaMask(await halfMask(), W * 2, H * 2, { inverted: false });
+    const meta = await sharp(alphaMask).metadata();
+
+    expect(meta.width).toBe(W * 2);
+    expect(meta.height).toBe(H * 2);
   });
 });
