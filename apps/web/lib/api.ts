@@ -373,6 +373,8 @@ export interface CredentialProvider {
   /** Onde a pessoa obtém a chave. Vai ao lado do campo. */
   helpUrl: string;
   keyPrefix?: string;
+  /** Pré-requisito além da chave. Aparece junto do campo, não depois do erro. */
+  requirement?: string;
 }
 
 export interface ProviderCredential {

@@ -186,6 +186,13 @@ function ProviderCard({
             />
           </label>
 
+          {provider.requirement && (
+            <p className="flex gap-2 rounded-md border border-state-warn/25 bg-state-warn/[0.06] px-3 py-2 text-micro leading-relaxed text-ink-secondary">
+              <Icon name="warning" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-state-warn" />
+              <span>{provider.requirement}</span>
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"

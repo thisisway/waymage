@@ -15,6 +15,13 @@ export interface CredentialProvider {
   helpUrl: string;
   /** Prefixo esperado, quando o fornecedor usa um. Só para errar cedo, nunca para autorizar. */
   keyPrefix?: string;
+  /**
+   * O que mais precisa estar em ordem além da chave.
+   *
+   * Chave válida não basta em todo fornecedor, e descobrir isso na primeira geração — por um
+   * erro de cota — custa uma sessão inteira de confusão. Dizer antes é mais barato.
+   */
+  requirement?: string;
 }
 
 export const CREDENTIAL_PROVIDERS: readonly CredentialProvider[] = [
@@ -23,6 +30,8 @@ export const CREDENTIAL_PROVIDERS: readonly CredentialProvider[] = [
     label: 'Google Gemini',
     helpUrl: 'https://aistudio.google.com/apikey',
     keyPrefix: 'AIza',
+    requirement:
+      'O projeto precisa de faturamento configurado. No nível gratuito os modelos de imagem respondem com erro de cota, e a chave parece inválida sem estar.',
   },
 ];
 
