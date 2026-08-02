@@ -1473,6 +1473,20 @@ assim que o fornecedor devolve uma recusa.
 CI, e cobrar do usuario a cada commit seria o pior arranjo possivel. A primeira chamada de
 verdade e manual.
 
+**E ela achou um erro meu.** A documentacao mostrava `"mime_type": "image/jpeg"` num exemplo, e
+eu generalizei para PNG e JPEG. A API aceita **so JPEG**, e a primeira geracao real voltou
+HTTP 400 dizendo isso. O adapter passou a pedir JPEG sempre, e `supportedFormats` declara so
+o que o fornecedor entrega — o formato que o usuario escolhe continua sendo aplicado na
+exportacao, por conversao.
+
+A licao e sobre o metodo: consultar a documentacao me protegeu de escrever a API errada
+inteira, mas **extrapolar um exemplo continua sendo chute**. O que o exemplo mostra e o que o
+exemplo mostra.
+
+Como a resposta e sempre JPEG, ler dimensao so de PNG deixaria toda geracao com tamanho zero.
+O adapter passou a percorrer os segmentos do JPEG ate o SOF — nao da para ler de deslocamento
+fixo, porque antes dele vem metadado de tamanho variavel.
+
 ---
 
 ## D-076 — Falha de rede nao pode soar como erro de aplicacao

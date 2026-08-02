@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { ProviderError } from './errors';
 import { GOOGLE_MODELS, GoogleImageProvider } from './google-provider';
@@ -74,7 +75,7 @@ describe('GoogleImageProvider', () => {
     const fetchImpl = vi.fn(async () => imageResponse());
     const provider = new GoogleImageProvider({ apiKey: 'k', fetchImpl });
 
-    const handle = await provider.generate(request({ aspectRatio: '16:9', format: 'jpeg' }));
+    const handle = await provider.generate(request({ aspectRatio: '16:9', format: 'webp' }));
     await settle(provider, handle.providerJobId);
 
     const body = JSON.parse(
@@ -88,6 +89,9 @@ describe('GoogleImageProvider', () => {
     expect(body.model).toBe(GOOGLE_MODELS.flash.name);
     expect(body.input[0]).toEqual({ type: 'text', text: 'uma xícara de café' });
     expect(body.response_format.aspect_ratio).toBe('16:9');
+    // JPEG mesmo com a cena pedindo WEBP: a API recusa qualquer outro valor, e a conversão
+    // para o formato escolhido acontece na exportação. Mandar `image/png` daqui derrubou a
+    // primeira geração real com HTTP 400.
     expect(body.response_format.mime_type).toBe('image/jpeg');
   });
 
@@ -259,5 +263,36 @@ describe('GoogleImageProvider', () => {
     // Zero, e não um palpite: exibir uma previsão de fatura inventada seria pior que não
     // exibir nenhuma.
     expect(a.externalCostCents).toBe(0);
+  });
+});
+
+describe('dimensões', () => {
+  it('lê o tamanho de um JPEG', async () => {
+    // A API só devolve JPEG, então este é o caminho normal — não o excepcional. Um leitor que
+    // só entendesse PNG deixaria toda geração real com dimensão zero.
+    const jpeg = await sharp({
+      create: { width: 640, height: 360, channels: 3, background: '#334455' },
+    })
+      .jpeg()
+      .toBuffer();
+
+    const provider = new GoogleImageProvider({
+      apiKey: 'k',
+      fetchImpl: vi.fn(async () =>
+        ok({
+          steps: [
+            {
+              content: [{ type: 'image', mime_type: 'image/jpeg', data: jpeg.toString('base64') }],
+            },
+          ],
+        }),
+      ),
+    });
+
+    const handle = await provider.generate(request());
+    const status = await settle(provider, handle.providerJobId);
+
+    expect(status.images[0]?.width).toBe(640);
+    expect(status.images[0]?.height).toBe(360);
   });
 });

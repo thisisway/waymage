@@ -129,7 +129,18 @@ export class GoogleImageProvider implements ImageProvider {
       negativePrompt: false,
       partialStreaming: false,
       supportedAspectRatios: ASPECT_RATIOS,
-      supportedFormats: ['png', 'jpeg'],
+      /**
+       * Só JPEG.
+       *
+       * A API recusa qualquer outro valor em `response_format.mime_type`, com
+       * `Supported values: 'image/jpeg'`. Declarar PNG aqui seria prometer o que o
+       * fornecedor não entrega.
+       *
+       * Não limita o produto: o formato que o usuário escolhe na cena é aplicado na
+       * exportação, por conversão. O que o provedor devolve é o arquivo de trabalho
+       * (docs/DECISIONS.md D-056).
+       */
+      supportedFormats: ['jpeg'],
       maxReferenceImages: 14,
       /**
        * Uma imagem por chamada: quatro saídas são quatro requisições.
@@ -316,7 +327,9 @@ export class GoogleImageProvider implements ImageProvider {
     input: InputPart[],
     request: ProviderGenerationRequest,
   ): Promise<ProviderImage> {
-    const mimeType = request.format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    // Fixo, e não derivado de `request.format`: a API recusa qualquer outro valor. A
+    // conversão para o formato pedido acontece na exportação.
+    const mimeType = 'image/jpeg';
 
     const response = await this.fetchImpl(ENDPOINT, {
       method: 'POST',
@@ -356,7 +369,7 @@ export class GoogleImageProvider implements ImageProvider {
     }
 
     const data = Buffer.from(image.data, 'base64');
-    const [width, height] = pngSize(data) ?? [0, 0];
+    const [width, height] = imageSize(data) ?? [0, 0];
 
     return { data, mimeType: image.mime_type ?? mimeType, width, height };
   }
@@ -444,13 +457,44 @@ export class GoogleImageProvider implements ImageProvider {
 }
 
 /**
- * Dimensões do PNG, lidas do cabeçalho IHDR.
+ * Largura e altura, lidas do cabeçalho.
  *
- * Treze bytes de leitura em vez de uma dependência de decodificação: só precisamos de largura
- * e altura, que o `GenerationResult` guarda. JPEG devolve `null` e o worker recalcula com o
- * `sharp`, que ele já carrega para gerar miniatura.
+ * Uma varredura de bytes em vez de uma dependência de decodificação de imagem: só precisamos
+ * de dois números, que o `GenerationResult` guarda e o cálculo de aderência usa. Trazer um
+ * decodificador para isso colocaria binário nativo num pacote que hoje roda em qualquer lugar.
+ *
+ * O worker ainda mede com `sharp` quando isto devolver zero — cinto e suspensório, porque
+ * dimensão errada não falha alto: ela vira uma legenda "0×0" e uma avaliação sem sentido.
  */
-function pngSize(data: Buffer): [number, number] | null {
-  const isPng = data.length > 24 && data.readUInt32BE(0) === 0x89504e47;
-  return isPng ? [data.readUInt32BE(16), data.readUInt32BE(20)] : null;
+function imageSize(data: Buffer): [number, number] | null {
+  if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) {
+    // PNG: IHDR vem sempre no mesmo lugar.
+    return [data.readUInt32BE(16), data.readUInt32BE(20)];
+  }
+
+  if (data.length < 4 || data.readUInt16BE(0) !== 0xffd8) return null;
+
+  /**
+   * JPEG: percorre os segmentos até o SOF, que carrega as dimensões.
+   *
+   * Não dá para ler de um deslocamento fixo como no PNG — antes do SOF vêm metadados de
+   * tamanho variável (EXIF, perfil de cor, miniatura), e o fornecedor decide quais inclui.
+   */
+  let offset = 2;
+  while (offset + 9 < data.length) {
+    if (data[offset] !== 0xff) {
+      offset++;
+      continue;
+    }
+
+    const marker = data[offset + 1] ?? 0;
+    // SOF0..SOF15, exceto DHT (C4), JPG (C8) e DAC (CC), que não descrevem o quadro.
+    const isFrameHeader = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+
+    if (isFrameHeader) return [data.readUInt16BE(offset + 7), data.readUInt16BE(offset + 5)];
+
+    offset += 2 + data.readUInt16BE(offset + 2);
+  }
+
+  return null;
 }
